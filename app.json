@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "NFC Payment App",
+    "slug": "nfc-payment-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "permissions": [
+        "android.permission.NFC",
+        "android.permission.WAKE_LOCK"
+      ],
+      "package": "com.nfcpayment.app",
+      "versionCode": 1
+    },
+    "web": {},
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "minSdkVersion": 21,
+            "compileSdkVersion": 34,
+            "targetSdkVersion": 34
+          }
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "6d7e8f5d-0f72-4445-a65c-3b8729172643"
+      }
+    }
+  }
+}
