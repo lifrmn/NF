@@ -10,8 +10,10 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { loginUser } from '../utils/database';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import CustomButton from '../components/CustomButton';
+import { loginUser } from '../utils/database';
+import { callAPI } from '../utils/simpleBackend'; // 🔥 backend online login fallback
 
 interface LoginScreenProps {
   onLogin: (user: any) => void;
@@ -23,8 +25,10 @@ export default function LoginScreen({ onLogin, onNavigateToRegister }: LoginScre
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // ======================================================
+  // Login Handler
+  // ======================================================
   const handleLogin = async () => {
-    console.log('Login button pressed');
     if (!username.trim() || !password.trim()) {
       Alert.alert('Error', 'Username dan password harus diisi');
       return;
@@ -32,25 +36,51 @@ export default function LoginScreen({ onLogin, onNavigateToRegister }: LoginScre
 
     setLoading(true);
     try {
-      const user = await loginUser(username, password);
-      if (user) {
-        onLogin(user);
+      console.log('🔐 Attempting login for:', username);
+
+      // 1️⃣ Coba login via BACKEND API
+      try {
+        const response = await callAPI('/api/auth/login', {
+          method: 'POST',
+          body: JSON.stringify({ username, password }),
+        });
+
+        if (response?.token && response?.user) {
+          const userData = response.user;
+          await AsyncStorage.setItem('token', response.token);
+          await AsyncStorage.setItem('userId', userData.id.toString());
+          console.log('✅ Login success (backend):', userData.username);
+          onLogin(userData);
+          setLoading(false);
+          return;
+        }
+      } catch (err) {
+        console.log('⚠️ Backend unavailable, using offline mode');
+      }
+
+      // 2️⃣ Fallback ke SQLite lokal
+      const localUser = await loginUser(username, password);
+      if (localUser) {
+        console.log('✅ Login success (offline):', localUser.username);
+        onLogin(localUser);
       } else {
-        Alert.alert('Error', 'Username atau password salah');
+        Alert.alert('Gagal', 'Username atau password salah');
       }
     } catch (error) {
+      console.error('❌ Login error:', error);
       Alert.alert('Error', 'Terjadi kesalahan saat login');
-      console.error('Login error:', error);
     } finally {
       setLoading(false);
     }
   };
 
   const handleNavigateToRegister = () => {
-    console.log('Navigate to register pressed');
     onNavigateToRegister();
   };
 
+  // ======================================================
+  // Render UI
+  // ======================================================
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView 
@@ -65,6 +95,7 @@ export default function LoginScreen({ onLogin, onNavigateToRegister }: LoginScre
             <TextInput
               style={styles.input}
               placeholder="Username"
+              placeholderTextColor="#95a5a6"
               value={username}
               onChangeText={setUsername}
               autoCapitalize="none"
@@ -74,6 +105,7 @@ export default function LoginScreen({ onLogin, onNavigateToRegister }: LoginScre
             <TextInput
               style={styles.input}
               placeholder="Password"
+              placeholderTextColor="#95a5a6"
               value={password}
               onChangeText={setPassword}
               secureTextEntry
@@ -94,7 +126,6 @@ export default function LoginScreen({ onLogin, onNavigateToRegister }: LoginScre
               style={styles.registerLinkContainer}
               onPress={handleNavigateToRegister}
               activeOpacity={0.7}
-              hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
             >
               <Text style={styles.registerLinkText}>
                 Belum punya akun? Daftar di sini
@@ -107,6 +138,9 @@ export default function LoginScreen({ onLogin, onNavigateToRegister }: LoginScre
   );
 }
 
+// ======================================================
+// Styles
+// ======================================================
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -143,73 +177,24 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 16,
     fontSize: 16,
+    color: '#2c3e50',
     borderWidth: 1,
     borderColor: '#ddd',
     minHeight: 50,
     shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 1,
-    },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.2,
-    shadowRadius: 2.0,
+    shadowRadius: 2,
     elevation: 2,
-  },
-  button: {
-    backgroundColor: '#3498db',
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  buttonDisabled: {
-    backgroundColor: '#bdc3c7',
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  buttonText: {
-    color: 'white',
-    textAlign: 'center',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  linkButton: {
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    marginVertical: 8,
-    backgroundColor: 'transparent',
-    borderRadius: 8,
-  },
-  linkText: {
-    textAlign: 'center',
-    color: '#3498db',
-    fontSize: 16,
-    fontWeight: '600',
   },
   loginButton: {
     marginBottom: 20,
   },
-  registerLink: {
-    marginTop: 10,
-  },
   registerLinkContainer: {
     paddingVertical: 20,
-    paddingHorizontal: 30,
     marginTop: 10,
-    marginBottom: 10,
     backgroundColor: 'transparent',
-    borderRadius: 8,
     alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 50,
   },
   registerLinkText: {
     textAlign: 'center',

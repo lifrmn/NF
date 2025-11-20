@@ -1,41 +1,74 @@
 {
   "name": "nfc-payment-app",
   "version": "1.0.0",
-  "description": "Aplikasi NFC Payment dengan Expo",
-  "main": "node_modules/expo/AppEntry.js",
+  "main": "App.tsx",
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
-    "eject": "expo eject"
+    "build:android": "eas build --platform android",
+    "build:ios": "eas build --platform ios",
+    "build:preview": "eas build --platform android --profile preview",
+    "submit:android": "eas submit --platform android",
+    "submit:ios": "eas submit --platform ios",
+    "setup": "npm install && cd backend && npm install && cd ../admin && npm install && cd ..",
+    "backend": "cd backend && npm start",
+    "admin": "cd admin && npm start",
+    "dev:all": "concurrently \"npm run backend\" \"npm run admin\" \"npm start\"",
+    "db:setup": "cd backend && npx prisma generate && npx prisma db push",
+    "test:network": "echo 'Cek IP: ipconfig | findstr IPv4' && echo 'Update eas.json dengan IP Anda' && echo 'Test: http://YOUR_IP:4000/health'",
+    "apk:guide": "echo 'Ikuti panduan di APK-CHECKLIST.md untuk setup lengkap'",
+    "clean": "npm run clean:cache && npm run clean:deps",
+    "clean:cache": "expo r -c",
+    "clean:deps": "rm -rf node_modules backend/node_modules admin/node_modules && npm run setup"
   },
   "dependencies": {
     "@react-native-async-storage/async-storage": "2.2.0",
-    "@react-navigation/native": "^6.1.9",
-    "@react-navigation/stack": "^6.3.20",
-    "dotenv": "^17.2.3",
+    "@react-navigation/native": "^6.1.7",
+    "@react-navigation/stack": "^6.3.17",
+    "@types/crypto-js": "^4.1.1",
+    "crypto-js": "^4.1.1",
     "expo": "~54.0.0",
-    "expo-asset": "~12.0.9",
-    "expo-build-properties": "~1.0.9",
+    "expo-asset": "~12.0.10",
     "expo-constants": "~18.0.10",
-    "expo-dev-client": "~6.0.16",
+    "expo-dev-client": "~6.0.18",
     "expo-font": "~14.0.9",
-    "expo-splash-screen": "~31.0.10",
+    "expo-splash-screen": "~31.0.11",
     "expo-sqlite": "~16.0.9",
     "expo-status-bar": "~3.0.8",
     "react": "19.1.0",
     "react-native": "0.81.5",
     "react-native-gesture-handler": "~2.28.0",
     "react-native-nfc-manager": "^3.14.13",
+    "react-native-paper": "^5.12.3",
+    "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "~5.6.0",
-    "react-native-screens": "~4.16.0"
+    "react-native-screens": "~4.16.0",
+    "react-native-worklets": "^0.6.1"
   },
   "devDependencies": {
     "@babel/core": "^7.20.0",
     "@types/react": "~19.1.10",
-    "@types/react-native": "~0.72.2",
+    "babel-preset-expo": "~54.0.0",
+    "concurrently": "^8.2.2",
     "typescript": "~5.9.2"
   },
-  "private": true
+  "expo": {
+    "doctor": {
+      "reactNativeDirectoryCheck": {
+        "exclude": [
+          "react-native-nfc-manager"
+        ]
+      }
+    },
+    "install": {
+      "exclude": [
+        "@types/react-native"
+      ]
+    }
+  },
+  "private": true,
+  "author": "NFC Payment Team",
+  "license": "MIT"
 }

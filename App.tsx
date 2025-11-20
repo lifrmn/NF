@@ -3,28 +3,31 @@ import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, NavigationContainerRef } from '@react-navigation/native';
 import { createStackNavigator, StackNavigationProp } from '@react-navigation/stack';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { 
-  View, 
-  ActivityIndicator, 
-  StyleSheet, 
-  Text, 
-  Alert,
+import { registerRootComponent } from 'expo';
+import {
+  ActivityIndicator,
+  StyleSheet,
+  Text,
   AppState,
-  AppStateStatus 
+  AppStateStatus,
+  Platform,
 } from 'react-native';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'; // ✅ Tambahan penting
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
-// Screens
+// ==================== Screens ====================
 import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import DashboardScreen from './src/screens/DashboardScreen';
 import NFCScreen from './src/screens/NFCScreen';
 
-// Utils
-import { getUserById, initializeDatabase, updateUserBalance } from './src/utils/database';
+// ==================== Utils ====================
+import { getUserById, initDatabase } from './src/utils/database';
+import { connectBackend } from './src/utils/simpleBackend';
 import { NFCService } from './src/utils/nfc';
+import { apiService } from './src/utils/apiService';
+// Removed - now using apiService
 
-// Navigation types
+// ==================== Navigation Types ====================
 export type RootStackParamList = {
   Login: undefined;
   Register: undefined;
@@ -33,92 +36,156 @@ export type RootStackParamList = {
 };
 
 export type NavigationProp = StackNavigationProp<RootStackParamList>;
+const Stack = createStackNavigator<RootStackParamList>();
 
-const Stack = createStackNavigator();
-
+// ==================== Types ====================
 type AuthState = 'loading' | 'signedIn' | 'signedOut';
 type AppScreen = 'login' | 'register' | 'dashboard' | 'nfc';
 
 interface AppUser {
   id: number;
   name: string;
-  email: string;
+  username: string;
   balance: number;
+  email?: string;
 }
 
-interface AppContextType {
-  user: AppUser | null;
-  authState: AuthState;
-  currentScreen: AppScreen;
-  setCurrentScreen: (screen: AppScreen) => void;
-  refreshUser: () => Promise<void>;
-}
-
+// ==================== MAIN APP ====================
 export default function App() {
   const [authState, setAuthState] = useState<AuthState>('loading');
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
-  const [currentScreen, setCurrentScreen] = useState<AppScreen>('login');
-  const [isNFCSupported, setIsNFCSupported] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const navigationRef = useRef<NavigationContainerRef<RootStackParamList>>(null);
 
+  console.log('🚀 App.tsx rendered, authState:', authState);
+
+  // ========================================================
+  // Initialization
+  // ========================================================
   useEffect(() => {
+    // Set timeout untuk paksa ke login jika loading > 20 detik
+    const forceLoginTimeout = setTimeout(() => {
+      if (authState === 'loading') {
+        console.warn('⚠️ Loading timeout, paksa ke login screen');
+        setAuthState('signedOut');
+      }
+    }, 20000);
+
     initializeApp();
-    setupAppStateListener();
+    
+    const sub = AppState.addEventListener('change', handleAppStateChange);
     return () => {
+      clearTimeout(forceLoginTimeout);
+      sub?.remove?.();
       NFCService.cleanup();
     };
   }, []);
 
-  const setupAppStateListener = () => {
-    const handleAppStateChange = (nextAppState: AppStateStatus) => {
-      if (nextAppState === 'background') {
-        NFCService.stopNFCScanning();
-      }
-    };
+  const handleAppStateChange = async (nextAppState: AppStateStatus) => {
+    if (nextAppState === 'active') {
+      console.log('📱 App aktif kembali, sync status device...');
+      try {
+        const deviceId =
+          (await AsyncStorage.getItem('deviceId')) || `device_${Date.now()}`;
+        const deviceInfo = {
+          deviceId,
+          platform: Platform.OS,
+          appVersion: '1.0.0',
+          timestamp: new Date().toISOString(),
+        };
 
-    const subscription = AppState.addEventListener('change', handleAppStateChange);
-    return () => subscription?.remove();
+        const userData = currentUser
+          ? {
+              userId: currentUser.id,
+              username: currentUser.username || currentUser.email?.split('@')[0] || `user_${currentUser.id}`,
+              balance: currentUser.balance,
+            }
+          : undefined;
+
+        await apiService.registerDevice(deviceInfo);
+        console.log('✅ Device status tersinkron ke backend');
+      } catch (err) {
+        console.log('⚠️ Gagal sync device status:', err);
+      }
+    }
   };
 
   const initializeApp = async () => {
     try {
       setError(null);
+      console.log('🚀 Memulai inisialisasi aplikasi...');
+
+      // === 1️⃣ Init Local DB (SQLite / Backend Proxy)
+      console.log('1️⃣ Inisialisasi database...');
+      await Promise.race([
+        initDatabase(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Database timeout')), 10000))
+      ]);
+      console.log('✅ Database ready');
+
+      // === 2️⃣ Init Backend API (Restore token + Base URL)
+      console.log('2️⃣ Inisialisasi Backend API...');
+      await Promise.race([
+        apiService.initialize(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Backend API timeout')), 10000))
+      ]);
+      console.log('✅ Backend API ready');
+
+      // === 3️⃣ Connect to Backend (Health check)
+      console.log('3️⃣ Koneksi ke backend server...');
+      const connected = await Promise.race([
+        connectBackend(),
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 10000))
+      ]);
       
-      // Initialize database
-      await initializeDatabase();
-      
-      // Check NFC support (non-blocking)
-      try {
-        const nfcSupported = await NFCService.initNFC();
-        setIsNFCSupported(nfcSupported);
-        
-        if (!nfcSupported) {
-          console.log('⚠️ NFC not supported - app will continue without NFC features');
-          // Don't show alert for emulator/Expo Go - just log
-          if (!__DEV__) {
-            Alert.alert(
-              'NFC Not Supported',
-              'This device does not support NFC functionality. Some features may be limited.',
-              [{ text: 'OK' }]
-            );
-          }
-        } else {
-          console.log('✅ NFC supported and initialized');
-        }
-      } catch (nfcError) {
-        console.log('⚠️ NFC initialization failed:', nfcError);
-        setIsNFCSupported(false);
+      if (!connected) {
+        console.warn('⚠️ Backend tidak terhubung, mode offline');
+        // Jangan throw error, lanjutkan ke auth check
+      } else {
+        console.log('✅ Backend connected');
       }
 
+      // === 4️⃣ Register Device ke Admin System (optional)
+      try {
+        console.log('4️⃣ Register device...');
+        const deviceId =
+          (await AsyncStorage.getItem('deviceId')) || `device_${Date.now()}`;
+        await AsyncStorage.setItem('deviceId', deviceId);
+
+        const deviceInfo = {
+          deviceId,
+          platform: Platform.OS,
+          appVersion: '1.0.0',
+          timestamp: new Date().toISOString(),
+        };
+
+        // Start API service monitoring
+        apiService.startConnectionMonitoring();
+        await Promise.race([
+          apiService.registerDevice(deviceInfo),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Sync timeout')), 3000))
+        ]);
+        console.log('✅ Device registered ke admin system');
+      } catch (err) {
+        console.warn('⚠️ Device sync failed, continue:', err);
+        // Tidak fatal, lanjutkan
+      }
+
+      // === 5️⃣ Cek Auth State
+      console.log('5️⃣ Cek authentication...');
       await checkAuthState();
-    } catch (error) {
-      console.error('App initialization error:', error);
-      setError('Failed to initialize app. Please restart the application.');
+
+      console.log('✅ Aplikasi siap digunakan!');
+    } catch (err: any) {
+      console.error('❌ Initialization error:', err);
+      // Tetap lanjutkan ke login screen
       setAuthState('signedOut');
     }
   };
 
+  // ========================================================
+  // Authentication Handling
+  // ========================================================
   const checkAuthState = async () => {
     try {
       const storedUserId = await AsyncStorage.getItem('userId');
@@ -128,143 +195,108 @@ export default function App() {
           const appUser: AppUser = {
             id: user.id,
             name: user.name,
+            username: user.username,
             email: `${user.username}@nfcpay.com`,
-            balance: user.balance || 0
+            balance: user.balance || 0,
           };
           setCurrentUser(appUser);
           setAuthState('signedIn');
-          setCurrentScreen('dashboard');
+          console.log('✅ User authenticated:', appUser.name);
           return;
         }
       }
       setAuthState('signedOut');
-      setCurrentScreen('login');
-    } catch (error) {
-      console.error('Error checking authentication:', error);
-      setError('Authentication check failed');
+    } catch (err) {
+      console.error('Error checking authentication:', err);
       setAuthState('signedOut');
-      setCurrentScreen('login');
     }
   };
 
-  const refreshUser = useCallback(async () => {
-    if (currentUser) {
-      try {
-        const user = await getUserById(currentUser.id);
-        if (user) {
-          const appUser: AppUser = {
-            id: user.id,
-            name: user.name,
-            email: `${user.username}@nfcpay.com`,
-            balance: user.balance || 0
-          };
-          setCurrentUser(appUser);
-        }
-      } catch (error) {
-        console.error('Error refreshing user:', error);
-      }
-    }
-  }, [currentUser]);
-
-  const handleLogin = async (userData: { id: number; name: string; username: string; balance?: number }) => {
+  const handleLogin = async (userData: {
+    id: number;
+    name: string;
+    username: string;
+    balance?: number;
+  }) => {
     try {
-      setError(null);
       const appUser: AppUser = {
         id: userData.id,
         name: userData.name,
+        username: userData.username,
         email: `${userData.username}@nfcpay.com`,
-        balance: userData.balance || 0
+        balance: userData.balance || 0,
       };
-      
       await AsyncStorage.setItem('userId', appUser.id.toString());
       setCurrentUser(appUser);
       setAuthState('signedIn');
-      setCurrentScreen('dashboard');
-      
-      // Navigate to Dashboard using React Navigation
-      if (navigationRef.current) {
-        try {
-          console.log('🔄 Navigating to Dashboard after login');
-          navigationRef.current.reset({
-            index: 0,
-            routes: [{ name: 'Dashboard' }],
-          });
-          console.log('✅ Navigation to Dashboard successful');
-        } catch (navError) {
-          console.error('❌ Navigation error:', navError);
-        }
-      } else {
-        console.log('⚠️ Navigation ref not available');
-      }
-    } catch (error) {
-      console.error('Login error:', error);
-      setError('Login failed. Please try again.');
+
+      navigationRef.current?.reset({
+        index: 0,
+        routes: [{ name: 'Dashboard' }],
+      });
+      console.log('✅ Login success:', appUser.name);
+    } catch (err) {
+      console.error('Login error:', err);
+      setError('Gagal login, silakan coba lagi.');
     }
   };
 
   const handleLogout = async () => {
     try {
-      console.log('🚪 Logout initiated');
       await AsyncStorage.removeItem('userId');
       setCurrentUser(null);
       setAuthState('signedOut');
-      setCurrentScreen('login');
       NFCService.cleanup();
-      
-      // Navigate to Login screen using React Navigation
-      if (navigationRef.current) {
-        try {
-          console.log('🔄 Navigating to Login after logout');
-          navigationRef.current.navigate('Login');
-          console.log('✅ Successfully navigated to Login');
-        } catch (navError) {
-          console.error('❌ Navigation error during logout:', navError);
-        }
-      }
-      
-      console.log('✅ Logout completed successfully');
-    } catch (error) {
-      console.error('Logout error:', error);
-      setError('Logout failed. Please try again.');
+
+      navigationRef.current?.reset({
+        index: 0,
+        routes: [{ name: 'Login' }],
+      });
+      console.log('✅ Logout success');
+    } catch (err) {
+      console.error('Logout error:', err);
+      setError('Logout gagal. Coba lagi.');
     }
   };
 
+  // ========================================================
+  // Navigation Shortcuts
+  // ========================================================
   const navigateToScreen = useCallback((screen: AppScreen) => {
-    console.log('🔄 Navigating to screen:', screen);
-    
-    // Use actual React Navigation for navigation
-    if (navigationRef.current) {
-      try {
-        console.log('🚀 Attempting React Navigation to:', screen);
-        if (screen === 'register') {
-          navigationRef.current.navigate('Register');
-          console.log('✅ Navigate to Register called');
-        } else if (screen === 'login') {
-          navigationRef.current.navigate('Login');
-          console.log('✅ Navigate to Login called');
-        } else if (screen === 'dashboard') {
-          navigationRef.current.navigate('Dashboard');
-          console.log('✅ Navigate to Dashboard called');
-        } else if (screen === 'nfc') {
-          navigationRef.current.navigate('NFC');
-          console.log('✅ Navigate to NFC called');
-        }
-      } catch (error) {
-        console.error('❌ Navigation error:', error);
-      }
-    } else {
-      console.error('❌ NavigationRef not available!');
+    if (!navigationRef.current) return;
+    try {
+      navigationRef.current.navigate(
+        screen === 'register'
+          ? 'Register'
+          : screen === 'dashboard'
+          ? 'Dashboard'
+          : screen === 'nfc'
+          ? 'NFC'
+          : 'Login'
+      );
+      console.log(`✅ Navigasi ke: ${screen}`);
+    } catch (err) {
+      console.error('Navigation error:', err);
     }
   }, []);
 
+  // ========================================================
+  // Loading & Error Screens
+  // ========================================================
   if (authState === 'loading') {
+    // Auto fallback to signedOut after 10 seconds
+    setTimeout(() => {
+      if (authState === 'loading') {
+        console.warn('⚠️ Loading timeout, forcing to login screen');
+        setAuthState('signedOut');
+      }
+    }, 10000);
+    
     return (
       <SafeAreaView style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3498db" />
-        <Text style={styles.loadingText}>Initializing NFC Payment App...</Text>
-        {error && (
-          <Text style={styles.errorText}>{error}</Text>
-        )}
+        <ActivityIndicator size="large" color="#2563eb" />
+        <Text style={styles.loadingText}>Memuat aplikasi NFC Payment...</Text>
+        <Text style={styles.loadingSubtext}>Mohon tunggu...</Text>
       </SafeAreaView>
     );
   }
@@ -272,37 +304,37 @@ export default function App() {
   if (error && authState === 'signedOut') {
     return (
       <SafeAreaView style={styles.errorContainer}>
-        <Text style={styles.errorTitle}>Application Error</Text>
+        <Text style={styles.errorTitle}>Terjadi Kesalahan</Text>
         <Text style={styles.errorText}>{error}</Text>
-        <Text 
-          style={styles.retryText} 
+        <Text
+          style={styles.retryText}
           onPress={() => {
             setError(null);
             initializeApp();
           }}
         >
-          Tap to retry
+          Coba lagi
         </Text>
       </SafeAreaView>
     );
   }
 
+  // ========================================================
+  // Main App Navigation
+  // ========================================================
   return (
     <SafeAreaProvider>
       <StatusBar style="auto" />
       <NavigationContainer ref={navigationRef}>
-        <Stack.Navigator 
-          screenOptions={{ 
+        <Stack.Navigator
+          screenOptions={{
             headerShown: false,
             gestureEnabled: true,
             animationEnabled: true,
           }}
           initialRouteName={authState === 'signedOut' ? 'Login' : 'Dashboard'}
         >
-          <Stack.Screen 
-            name="Login"
-            options={{ headerShown: false }}
-          >
+          <Stack.Screen name="Login" options={{ headerShown: false }}>
             {() => (
               <LoginScreen
                 onLogin={handleLogin}
@@ -311,10 +343,7 @@ export default function App() {
             )}
           </Stack.Screen>
 
-          <Stack.Screen 
-            name="Register"
-            options={{ headerShown: false }}
-          >
+          <Stack.Screen name="Register" options={{ headerShown: false }}>
             {() => (
               <RegisterScreen
                 onRegisterSuccess={() => navigateToScreen('login')}
@@ -323,10 +352,7 @@ export default function App() {
             )}
           </Stack.Screen>
 
-          <Stack.Screen 
-            name="Dashboard"
-            options={{ headerShown: false }}
-          >
+          <Stack.Screen name="Dashboard" options={{ headerShown: false }}>
             {() => (
               <DashboardScreen
                 user={currentUser}
@@ -336,10 +362,7 @@ export default function App() {
             )}
           </Stack.Screen>
 
-          <Stack.Screen 
-            name="NFC"
-            options={{ headerShown: false }}
-          >
+          <Stack.Screen name="NFC" options={{ headerShown: false }}>
             {() => (
               <NFCScreen
                 user={currentUser}
@@ -353,47 +376,54 @@ export default function App() {
   );
 }
 
+// ========================================================
+// Styles
+// ========================================================
 const styles = StyleSheet.create({
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
-    padding: 20,
+    backgroundColor: '#f8fafc',
   },
   loadingText: {
     marginTop: 20,
     fontSize: 16,
-    color: '#6c757d',
+    color: '#6b7280',
     textAlign: 'center',
-    fontWeight: '500',
+  },
+  loadingSubtext: {
+    marginTop: 8,
+    fontSize: 14,
+    color: '#9ca3af',
+    textAlign: 'center',
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#fef2f2',
     padding: 20,
   },
   errorTitle: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
-    color: '#dc3545',
-    marginBottom: 16,
-    textAlign: 'center',
+    color: '#b91c1c',
+    marginBottom: 10,
   },
   errorText: {
-    fontSize: 16,
-    color: '#6c757d',
+    fontSize: 15,
+    color: '#374151',
     textAlign: 'center',
-    marginBottom: 20,
-    lineHeight: 24,
+    marginBottom: 12,
   },
   retryText: {
     fontSize: 16,
-    color: '#007bff',
+    color: '#1d4ed8',
     fontWeight: '600',
     textDecorationLine: 'underline',
-    padding: 10,
   },
 });
+
+// Register the main component with Expo
+registerRootComponent(App);

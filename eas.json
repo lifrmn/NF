@@ -1,20 +1,27 @@
 {
   "cli": {
-    "version": ">= 7.8.0"
+    "version": ">= 3.0.0",
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
       "developmentClient": true,
       "distribution": "internal",
+      "env": {
+        "API_URL": "https://unbellicose-troublesomely-miley.ngrok-free.dev"
+      },
       "android": {
-        "gradleCommand": ":app:assembleDebug",
-        "buildType": "apk"
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleDebug"
       }
     },
     "preview": {
-      "distribution": "internal",
+      "env": {
+        "API_URL": "https://unbellicose-troublesomely-miley.ngrok-free.dev"
+      },
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleRelease"
       }
     },
     "production": {
@@ -22,8 +29,5 @@
         "buildType": "app-bundle"
       }
     }
-  },
-  "submit": {
-    "production": {}
   }
 }

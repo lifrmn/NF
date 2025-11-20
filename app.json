@@ -5,37 +5,46 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
+    "platforms": [
+      "android"
+    ],
     "assetBundlePatterns": [
       "**/*"
     ],
-    "ios": {
-      "supportsTablet": true
-    },
     "android": {
+      "package": "com.nfcpayment.app",
+      "versionCode": 10,
       "permissions": [
         "android.permission.NFC",
-        "android.permission.WAKE_LOCK"
+        "android.permission.WAKE_LOCK",
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE"
       ],
-      "package": "com.nfcpayment.app",
-      "versionCode": 1
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#FFFFFF"
+      }
     },
-    "web": {},
     "plugins": [
-      [
-        "expo-build-properties",
-        {
-          "android": {
-            "minSdkVersion": 21,
-            "compileSdkVersion": 34,
-            "targetSdkVersion": 34
-          }
-        }
-      ]
+      "react-native-nfc-manager",
+      "expo-dev-client",
+      "expo-asset",
+      "expo-font",
+      "expo-sqlite"
     ],
     "extra": {
+      "EXPO_PUBLIC_API_BASE": "http://192.168.137.1:4000",
+      "EXPO_PUBLIC_ADMIN_BASE": "http://192.168.137.1:3001",
+      "EXPO_PUBLIC_BACKEND_URL": "http://192.168.137.1:4000",
+      "EXPO_PUBLIC_ADMIN_URL": "http://192.168.137.1:3001",
+      "EXPO_PUBLIC_SERVER_IP": "192.168.137.1",
+      "EXPO_PUBLIC_ADMIN_PORT": "3001",
+      "EXPO_PUBLIC_PORT": "4000",
       "eas": {
-        "projectId": "6d7e8f5d-0f72-4445-a65c-3b8729172643"
+        "projectId": "4ece5684-5922-407d-a296-93580d8f235f"
       }
-    }
+    },
+    "owner": "adminskuy"
   }
 }
