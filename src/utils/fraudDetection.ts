@@ -42,6 +42,9 @@ export interface TransactionContext {
   deviceId: string;        // ID device yang digunakan (untuk tracking)
   userAgent?: string;      // Browser/app info (optional)
   ipAddress?: string;      // IP address pengirim (optional)
+  cardId?: string;         // UID kartu NFC fisik (jika menggunakan kartu)
+  cardType?: 'virtual' | 'physical'; // Tipe transaksi: virtual (phone) atau physical (card)
+  isPhysicalCard?: boolean; // Flag untuk transaksi kartu fisik
 }
 
 // Interface untuk pola perilaku user
@@ -587,6 +590,16 @@ class FraudDetectionAI {
     pattern: UserBehaviorPattern
   ): string[] {
     const reasons: string[] = [];
+    
+    // CEK PHYSICAL CARD TRANSACTION
+    if (context.isPhysicalCard || context.cardType === 'physical') {
+      reasons.push(`Physical NFC Card Transaction (${context.cardId?.slice(0, 8) || 'unknown'}...)`);
+      
+      // Lower risk for physical cards (harder to clone/steal)
+      if (factors.velocityScore > 80) {
+        reasons.push('Multiple rapid card transactions detected');
+      }
+    }
     
     // CEK FAKTOR 1: Velocity Score
     // Kalau velocity > 70, tambahkan alasan

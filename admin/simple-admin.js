@@ -10,6 +10,7 @@ const path = require('path'); // Manipulasi path file
 const os = require('os'); // Info sistem operasi (untuk ambil IP)
 const helmet = require('helmet'); // Security headers untuk proteksi
 const http = require('http'); // HTTP client untuk fetch backend
+const https = require('https'); // HTTPS client untuk fetch backend
 
 // ==================== KONFIGURASI ====================
 const PORT = 3001; // Port server (3001)
@@ -17,7 +18,7 @@ const APP_SECRET = 'NFC2025SecureApp'; // Secret key aplikasi (untuk validasi)
 const ADMIN_PASSWORD = 'admin123'; // Password admin untuk top-up saldo
 
 // NGROK CONFIGURATION - Ubah URL ini sesuai dengan ngrok tunnel Anda
-const NGROK_URL = 'https://117c6f092a55.ngrok-free.app'; // URL ngrok backend
+const NGROK_URL = 'https://unbellicose-troublesomely-miley.ngrok-free.dev'; // URL ngrok backend
 const BACKEND_URL = NGROK_URL; // Backend URL (gunakan ngrok)
 
 // Helper function untuk parsing URL
@@ -32,11 +33,54 @@ function parseBackendUrl() {
   } catch (error) {
     // Fallback ke localhost jika URL tidak valid
     return {
-      hostname: backendConfig.hostname,
-      port: backendConfig.port,
+      hostname: 'localhost',
+      port: 4000,
       protocol: 'http'
     };
   }
+}
+
+// Helper function untuk HTTP/HTTPS requests
+function makeHttpRequest(options) {
+  return new Promise((resolve, reject) => {
+    // Determine which client to use based on protocol
+    const isHttps = options.protocol === 'https' || options.protocol === 'https:';
+    const client = isHttps ? https : http;
+    
+    // Remove protocol and body from options untuk client.request()
+    const requestOptions = { ...options };
+    delete requestOptions.protocol;
+    delete requestOptions.body;
+    
+    const req = client.request(requestOptions, (response) => {
+      let data = '';
+      
+      response.on('data', (chunk) => {
+        data += chunk;
+      });
+      
+      response.on('end', () => {
+        try {
+          const jsonData = JSON.parse(data);
+          resolve(jsonData);
+        } catch (parseError) {
+          reject(parseError);
+        }
+      });
+    });
+
+    req.on('error', (error) => {
+      reject(error);
+    });
+
+    if (options.body) {
+      const bodyData = JSON.stringify(options.body);
+      console.log(`📨 Writing body to request:`, bodyData);
+      req.setHeader('Content-Length', Buffer.byteLength(bodyData));
+      req.write(bodyData);
+    }
+    req.end();
+  });
 }
 
 // Fungsi untuk mendapatkan IP address laptop (untuk koneksi dari HP)
@@ -88,7 +132,32 @@ function protectAPI(req, res, next) {
   }
   
   // BYPASS PROTEKSI untuk admin endpoints dari localhost/dashboard
-  if (req.path.startsWith('/api/') && (req.ip.includes('127.0.0.1') || req.ip.includes('192.168.137.1') || req.ip.includes('::ffff:192.168.137.1') || req.ip.includes('::1'))) {
+  // Allow all local network IPs (10.x.x.x, 192.168.x.x, 172.16.x.x, 169.254.x.x, localhost)
+  const ipStr = req.ip || '';
+  const isLocalNetwork = 
+    ipStr.includes('127.0.0.1') || 
+    ipStr.includes('::1') || 
+    ipStr.includes('192.168.') || 
+    ipStr.includes('10.') || 
+    ipStr.includes('172.16.') ||
+    ipStr.includes('172.17.') ||
+    ipStr.includes('172.18.') ||
+    ipStr.includes('172.19.') ||
+    ipStr.includes('172.20.') ||
+    ipStr.includes('172.21.') ||
+    ipStr.includes('172.22.') ||
+    ipStr.includes('172.23.') ||
+    ipStr.includes('172.24.') ||
+    ipStr.includes('172.25.') ||
+    ipStr.includes('172.26.') ||
+    ipStr.includes('172.27.') ||
+    ipStr.includes('172.28.') ||
+    ipStr.includes('172.29.') ||
+    ipStr.includes('172.30.') ||
+    ipStr.includes('172.31.') ||
+    ipStr.includes('169.254.'); // Link-local address
+    
+  if (req.path.startsWith('/api/') && isLocalNetwork) {
     console.log(`✅ Admin dashboard access allowed from ${req.ip} to ${req.path}`);
     return next(); // Lanjut tanpa validasi untuk admin dashboard
   }
@@ -183,6 +252,14 @@ class SimpleNFCAdmin {
     this.app.post('/api/bulk-topup', this.bulkTopupEndpoint.bind(this)); // Bulk top-up
     this.app.post('/api/reset-balance', this.resetBalanceEndpoint.bind(this)); // Reset user balance
     this.app.post('/api/clear-fraud-alerts', this.clearFraudAlertsEndpoint.bind(this)); // Clear alerts
+    
+    // NFC Card management endpoints
+    this.app.get('/api/nfc-cards', this.getNFCCards.bind(this)); // Get all NFC cards
+    this.app.post('/api/nfc-cards/register', this.registerNFCCard.bind(this)); // Register new card
+    this.app.post('/api/nfc-cards/link', this.linkNFCCard.bind(this)); // Link card to user
+    this.app.post('/api/nfc-cards/block', this.blockNFCCard.bind(this)); // Block card
+    this.app.post('/api/nfc-cards/topup', this.topupNFCCard.bind(this)); // Topup card balance
+    this.app.delete('/api/nfc-cards/:cardId', this.deleteNFCCard.bind(this)); // Delete card
     
     // Ping endpoint (penting untuk APK agar bisa deteksi server)
     this.app.get('/api/ping', (req, res) => {
@@ -283,7 +360,9 @@ class SimpleNFCAdmin {
         };
 
         const backendData = await new Promise((resolve, reject) => {
-          const req = http.request(options, (response) => {
+          // Select correct client based on protocol
+          const client = backendConfig.protocol === 'https' ? https : http;
+          const req = client.request(options, (response) => {
             let data = '';
             
             response.on('data', (chunk) => {
@@ -663,7 +742,11 @@ class SimpleNFCAdmin {
       try {
         // HTTP request menggunakan module bawaan Node.js
         const backendData = await new Promise((resolve, reject) => {
-          const request = http.get(backendUrl, (response) => {
+          // Select correct client based on protocol
+          const backendConfig = parseBackendUrl();
+          const client = backendConfig.protocol === 'https' ? https : http;
+          
+          const request = client.get(backendUrl, (response) => {
             let data = '';
             
             response.on('data', (chunk) => {
@@ -800,7 +883,9 @@ class SimpleNFCAdmin {
             }
           };
           
-          const request = http.request(options, (response) => {
+          // Select correct client based on protocol
+          const client = backendConfig.protocol === 'https' ? https : http;
+          const request = client.request(options, (response) => {
             let data = '';
             
             response.on('data', (chunk) => {
@@ -867,7 +952,9 @@ class SimpleNFCAdmin {
             }
           };
           
-          const request = http.request(options, (response) => {
+          // Select correct client based on protocol
+          const client = backendConfig.protocol === 'https' ? https : http;
+          const request = client.request(options, (response) => {
             let data = '';
             
             response.on('data', (chunk) => {
@@ -944,7 +1031,9 @@ class SimpleNFCAdmin {
         };
 
         const backendData = await new Promise((resolve, reject) => {
-          const req = http.request(options, (response) => {
+          // Select correct client based on protocol
+          const client = backendConfig.protocol === 'https' ? https : http;
+          const req = client.request(options, (response) => {
             let data = '';
             
             response.on('data', (chunk) => {
@@ -1035,7 +1124,9 @@ class SimpleNFCAdmin {
         };
 
         const backendData = await new Promise((resolve, reject) => {
-          const req = http.request(options, (response) => {
+          // Select correct client based on protocol
+          const client = backendConfig.protocol === 'https' ? https : http;
+          const req = client.request(options, (response) => {
             let data = '';
             
             response.on('data', (chunk) => {
@@ -1129,7 +1220,9 @@ class SimpleNFCAdmin {
             }
           };
 
-          const req = http.request(options, (response) => {
+          // Select correct client based on protocol
+          const client = backendConfig.protocol === 'https' ? https : http;
+          const req = client.request(options, (response) => {
             let data = '';
             
             response.on('data', (chunk) => {
@@ -1247,7 +1340,9 @@ class SimpleNFCAdmin {
         };
 
         const backendData = await new Promise((resolve, reject) => {
-          const req = http.request(options, (response) => {
+          // Select correct client based on protocol
+          const client = backendConfig.protocol === 'https' ? https : http;
+          const req = client.request(options, (response) => {
             let data = '';
             
             response.on('data', (chunk) => {
@@ -1345,7 +1440,9 @@ class SimpleNFCAdmin {
         };
 
         const backendData = await new Promise((resolve, reject) => {
-          const req = http.request(options, (response) => {
+          // Select correct client based on protocol
+          const client = backendConfig.protocol === 'https' ? https : http;
+          const req = client.request(options, (response) => {
             let data = '';
             
             response.on('data', (chunk) => {
@@ -1426,30 +1523,264 @@ class SimpleNFCAdmin {
     }
   }
 
+  // ==================== NFC CARD MANAGEMENT ENDPOINTS ====================
+
+  // Get all NFC cards (GET /api/nfc-cards)
+  async getNFCCards(req, res) {
+    try {
+      const backendConfig = parseBackendUrl();
+      const backendUrl = `${BACKEND_URL}/api/nfc-cards/list`;
+      
+      try {
+        const options = {
+          hostname: backendConfig.hostname,
+          port: backendConfig.port,
+          path: '/api/nfc-cards/list?limit=1000', // Get ALL cards
+          method: 'GET',
+          protocol: backendConfig.protocol,
+          headers: {
+            'Content-Type': 'application/json',
+            'ngrok-skip-browser-warning': 'true'
+          }
+        };
+
+        console.log(`📡 Fetching ALL NFC cards from: ${BACKEND_URL}/api/nfc-cards/list`);
+        const backendData = await makeHttpRequest(options);
+        
+        if (backendData.success) {
+          console.log(`✅ Loaded ${backendData.cards?.length || 0} NFC cards from backend (Total in DB: ${backendData.total})`);
+          res.json({
+            success: true,
+            cards: backendData.cards || [],
+            total: backendData.total || (backendData.cards?.length || 0)
+          });
+        } else {
+          throw new Error(backendData.error || 'Failed to load cards');
+        }
+      } catch (backendError) {
+        console.error('❌ Backend get NFC cards error:', backendError.message);
+        res.json({
+          success: false,
+          cards: [],
+          error: `Backend error: ${backendError.message}`,
+          total: 0
+        });
+      }
+    } catch (error) {
+      console.error('❌ Get NFC cards error:', error);
+      res.status(500).json({ 
+        success: false,
+        error: `Server error: ${error.message}`,
+        cards: [],
+        total: 0
+      });
+    }
+  }
+
+  // Register new NFC card (POST /api/nfc-cards/register)
+  async registerNFCCard(req, res) {
+    try {
+      const { cardId, userId, cardType } = req.body;
+      
+      if (!cardId || !userId) {
+        return res.status(400).json({ error: 'cardId and userId are required' });
+      }
+
+      const backendConfig = parseBackendUrl();
+      const postData = JSON.stringify({ cardId, userId, cardType: cardType || 'NTag215' });
+      
+      const options = {
+        hostname: backendConfig.hostname,
+        port: backendConfig.port,
+        path: '/api/nfc-cards/register',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+          'Content-Length': Buffer.byteLength(postData)
+        }
+      };
+
+      const backendData = await makeHttpRequest({ ...options, body: { cardId, userId, cardType: cardType || 'NTag215' } });
+      
+      if (backendData.success) {
+        console.log(`✅ Registered NFC card: ${cardId} for user ${userId}`);
+        res.json(backendData);
+      } else {
+        res.status(400).json(backendData);
+      }
+    } catch (error) {
+      console.error('❌ Register NFC card error:', error);
+      res.status(500).json({ error: 'Failed to register NFC card' });
+    }
+  }
+
+  // Link NFC card to user (POST /api/nfc-cards/link)
+  async linkNFCCard(req, res) {
+    try {
+      const { cardId, userId } = req.body;
+      
+      if (!cardId || !userId) {
+        return res.status(400).json({ error: 'cardId and userId are required' });
+      }
+
+      const backendConfig = parseBackendUrl();
+      const options = {
+        hostname: backendConfig.hostname,
+        port: backendConfig.port,
+        path: '/api/nfc-cards/link',
+        method: 'POST',
+        body: { cardId, userId }
+      };
+
+      const backendData = await makeHttpRequest(options);
+      
+      if (backendData.success) {
+        console.log(`✅ Linked NFC card: ${cardId} to user ${userId}`);
+        res.json(backendData);
+      } else {
+        res.status(400).json(backendData);
+      }
+    } catch (error) {
+      console.error('❌ Link NFC card error:', error);
+      res.status(500).json({ error: 'Failed to link NFC card' });
+    }
+  }
+
+  // Block NFC card (POST /api/nfc-cards/block)
+  async blockNFCCard(req, res) {
+    try {
+      const { cardId, reason } = req.body;
+      
+      if (!cardId) {
+        return res.status(400).json({ error: 'cardId is required' });
+      }
+
+      const backendConfig = parseBackendUrl();
+      const options = {
+        hostname: backendConfig.hostname,
+        port: backendConfig.port,
+        path: '/api/nfc-cards/status',
+        method: 'PUT',
+        body: { cardId, status: 'BLOCKED', reason: reason || 'Blocked by admin' }
+      };
+
+      const backendData = await makeHttpRequest(options);
+      
+      if (backendData.success) {
+        console.log(`✅ Blocked NFC card: ${cardId}`);
+        res.json(backendData);
+      } else {
+        res.status(400).json(backendData);
+      }
+    } catch (error) {
+      console.error('❌ Block NFC card error:', error);
+      res.status(500).json({ error: 'Failed to block NFC card' });
+    }
+  }
+
+  // Top-up NFC card balance (POST /api/nfc-cards/topup)
+  async topupNFCCard(req, res) {
+    try {
+      const { cardId, amount, adminPassword } = req.body;
+      
+      if (!cardId || !amount) {
+        return res.status(400).json({ error: 'cardId and amount are required' });
+      }
+
+      if (adminPassword !== ADMIN_PASSWORD) {
+        return res.status(403).json({ error: 'Invalid admin password' });
+      }
+
+      const backendConfig = parseBackendUrl();
+      const options = {
+        hostname: backendConfig.hostname,
+        port: backendConfig.port,
+        path: '/api/nfc-cards/topup',
+        method: 'POST',
+        body: { cardId, amount, adminPassword }
+      };
+
+      const backendData = await makeHttpRequest(options);
+      
+      if (backendData.success) {
+        console.log(`✅ Topped up NFC card: ${cardId} with ${amount}`);
+        res.json(backendData);
+      } else {
+        res.status(400).json(backendData);
+      }
+    } catch (error) {
+      console.error('❌ Top-up NFC card error:', error);
+      res.status(500).json({ error: 'Failed to top-up NFC card' });
+    }
+  }
+
+  // Delete NFC card (DELETE /api/nfc-cards/:cardId)
+  async deleteNFCCard(req, res) {
+    try {
+      const { cardId } = req.params;
+      const { adminPassword } = req.body;
+      
+      if (!cardId) {
+        return res.status(400).json({ error: 'cardId is required' });
+      }
+
+      if (adminPassword !== ADMIN_PASSWORD) {
+        return res.status(403).json({ error: 'Invalid admin password' });
+      }
+
+      const backendConfig = parseBackendUrl();
+      const bodyData = JSON.stringify({ adminPassword });
+      const options = {
+        hostname: backendConfig.hostname,
+        port: backendConfig.port,
+        path: `/api/nfc-cards/delete/${cardId}`,
+        method: 'DELETE',
+        protocol: backendConfig.protocol,
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(bodyData),
+          'ngrok-skip-browser-warning': 'true'
+        },
+        body: { adminPassword } // Include body for DELETE request
+      };
+
+      console.log(`🗑️ Attempting to delete card ${cardId} from backend...`);
+      console.log(`🔐 Admin password check: ${adminPassword === ADMIN_PASSWORD ? 'VALID' : 'INVALID'}`);
+      console.log(`📤 Sending to: ${backendConfig.hostname}${options.path}`);
+      console.log(`📦 Body:`, options.body);
+      const backendData = await makeHttpRequest(options);
+      
+      if (backendData.success) {
+        console.log(`🗑️ Deleted NFC card: ${cardId}`);
+        res.json(backendData);
+      } else {
+        res.status(400).json(backendData);
+      }
+    } catch (error) {
+      console.error('❌ Delete NFC card error:', error);
+      res.status(500).json({ error: 'Failed to delete NFC card' });
+    }
+  }
+
   // Start server dan tampilkan info koneksi
   start() {
     this.app.listen(PORT, () => { // Listen di port 3001
-      const localIPs = getLocalIPAddress(); // Ambil IP laptop
-      
       console.log('🚀 Simple NFC Payment Admin started!');
       console.log(`📊 Dashboard: http://localhost:${PORT}`);
       console.log('');
-      console.log('🌐 IP Address untuk Android Apps:');
-      // Tampilkan semua IP yang bisa diakses dari HP
-      localIPs.forEach(ip => {
-        console.log(`   📱 http://${ip}:${PORT}`);
-      });
+      console.log('🌐 Backend Connection:');
+      console.log(`   📡 Ngrok URL: ${NGROK_URL}`);
       console.log('');
       console.log('📋 Cara menggunakan:');
-      console.log('   1. Pastikan laptop dan Android di WiFi yang sama');
-      console.log('   2. Aplikasi akan otomatis mencari IP admin server');
-      console.log('   3. Jika tidak ketemu, aplikasi tetap jalan mode offline');
-      console.log('   4. Monitor pengguna dan transaksi dari dashboard ini');
+      console.log('   1. Pastikan ngrok tunnel aktif di terminal lain');
+      console.log('   2. Aplikasi Android connect ke ngrok URL');
+      console.log('   3. Monitor pengguna dan transaksi dari dashboard ini');
       console.log('');
-      console.log('🔧 Network Setup:');
-      console.log('   - Aplikasi Android akan auto-detect admin server');
-      console.log('   - Tidak perlu setting manual IP address');
-      console.log('   - Admin server akan muncul di dashboard aplikasi Android');
+      console.log('🔧 Setup:');
+      console.log('   - Backend: node server.js (port 4000)');
+      console.log('   - Ngrok: ngrok http 4000');
+      console.log('   - Admin: node simple-admin.js (port 3001)');
     });
 
     // Start cleanup timer untuk hapus device offline

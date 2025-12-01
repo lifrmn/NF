@@ -328,6 +328,55 @@ router.get('/', async (req, res) => {
 });
 
 /* -------------------------------------------------------------------------- */
+/*                        GET TRANSACTIONS BY USER ID                         */
+/* -------------------------------------------------------------------------- */
+router.get('/user/:userId', async (req, res) => {
+  try {
+    const userId = parseInt(req.params.userId, 10);
+    if (isNaN(userId)) {
+      return res.status(400).json({ error: 'Invalid user ID' });
+    }
+
+    const { limit = 20, offset = 0, status } = req.query;
+
+    const where = {
+      OR: [
+        { senderId: userId },
+        { receiverId: userId }
+      ]
+    };
+    
+    if (status) where.status = status;
+
+    const transactions = await prisma.transaction.findMany({
+      where,
+      include: {
+        sender: {
+          select: { id: true, name: true, username: true }
+        },
+        receiver: {
+          select: { id: true, name: true, username: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: parseInt(String(limit), 10),
+      skip: parseInt(String(offset), 10),
+    });
+
+    // Add transaction type info (sent/received) for the requesting user
+    const transactionsWithType = transactions.map(transaction => ({
+      ...transaction,
+      transactionType: transaction.senderId === userId ? 'sent' : 'received'
+    }));
+
+    res.json(transactionsWithType);
+  } catch (error) {
+    console.error('Get user transactions error:', error);
+    res.status(500).json({ error: 'Failed to get user transactions' });
+  }
+});
+
+/* -------------------------------------------------------------------------- */
 /*                    TRANSACTION STATS (PLACE BEFORE /:id)                   */
 /* -------------------------------------------------------------------------- */
 router.get('/stats/summary', async (req, res) => {

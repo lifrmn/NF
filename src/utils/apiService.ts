@@ -16,12 +16,8 @@ import { API_URL } from './configuration';
 export class APIService {
   private static instance: APIService;
   private token: string | null = null;
-  private isConnected = false;
+  private userId: string | null = null;
   private baseUrl = API_URL;
-  private checkInterval: any = null;
-  private reconnectAttempts = 0;
-  private maxReconnectAttempts = 5;
-  private lastConnectedUrl = '';
 
   static getInstance(): APIService {
     if (!APIService.instance) {
@@ -33,55 +29,13 @@ export class APIService {
   async initialize(): Promise<boolean> {
     try {
       this.token = await AsyncStorage.getItem('token');
-      this.startConnectionMonitoring();
-      console.log('🔧 API Service initialized with URL:', this.baseUrl);
+      this.userId = await AsyncStorage.getItem('userId');
+      console.log('🔧 API Service initialized');
+      console.log('📡 Ngrok URL:', this.baseUrl);
       return true;
     } catch (error) {
       console.error('❌ API Service initialization failed:', error);
       return false;
-    }
-  }
-
-  // ========================= CONNECTION MONITORING =========================
-
-  /**
-   * 🚀 Start backend connection monitoring
-   */
-  startConnectionMonitoring(): void {
-    console.log('🛰️ Starting backend connection monitoring...');
-    this.stopConnectionMonitoring();
-    this.checkBackendConnection();
-    this.checkInterval = setInterval(() => {
-      this.checkBackendConnection();
-    }, 30000); // Check every 30 seconds
-  }
-
-  /**
-   * 🛑 Stop monitoring
-   */
-  stopConnectionMonitoring(): void {
-    if (this.checkInterval) {
-      clearInterval(this.checkInterval);
-      this.checkInterval = null;
-    }
-  }
-
-  /**
-   * 🩺 Check backend connection
-   */
-  private async checkBackendConnection(): Promise<void> {
-    try {
-      const response = await this.makeRequest('/api/health', { method: 'GET' });
-      if (response) {
-        this.isConnected = true;
-        this.reconnectAttempts = 0;
-        this.lastConnectedUrl = this.baseUrl;
-        console.log('✅ Backend connected:', this.baseUrl);
-      }
-    } catch (error) {
-      this.isConnected = false;
-      this.reconnectAttempts++;
-      console.warn(`⚠️ Backend connection failed (${this.reconnectAttempts}/${this.maxReconnectAttempts}):`, error);
     }
   }
 
@@ -103,6 +57,7 @@ export class APIService {
           'User-Agent': 'NFC-Payment-Mobile',
           ...(options.headers || {}),
           ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}),
+          ...(this.userId ? { 'x-user-id': this.userId } : {}),
         },
         body: options.body ? JSON.stringify(options.body) : undefined,
         signal: controller.signal,
@@ -117,10 +72,23 @@ export class APIService {
 
       if (!response.ok) {
         const errorText = await response.text().catch(() => '');
+        
+        // Handle authentication errors
         if (response.status === 401 || response.status === 403) {
           await this.logout();
         }
-        throw new Error(`API Error ${response.status}: ${errorText}`);
+        
+        // Parse error response to extract detailed error info
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { error: errorText };
+        }
+        
+        // Create detailed error message
+        const errorMessage = `API Error ${response.status}: ${JSON.stringify(errorData)}`;
+        throw new Error(errorMessage);
       }
 
       const contentType = response.headers.get('content-type') || '';
@@ -136,9 +104,26 @@ export class APIService {
       return await response.text();
     } catch (error: any) {
       console.error('❌ API Request failed:', error.message);
-      this.isConnected = false;
       throw error;
     }
+  }
+
+  // ========================= HTTP METHOD SHORTCUTS =========================
+
+  async get(endpoint: string) {
+    return await this.makeRequest(endpoint, { method: 'GET' });
+  }
+
+  async post(endpoint: string, body?: any) {
+    return await this.makeRequest(endpoint, { method: 'POST', body });
+  }
+
+  async put(endpoint: string, body?: any) {
+    return await this.makeRequest(endpoint, { method: 'PUT', body });
+  }
+
+  async delete(endpoint: string) {
+    return await this.makeRequest(endpoint, { method: 'DELETE' });
   }
 
   // ========================= AUTHENTICATION METHODS =========================
@@ -151,6 +136,7 @@ export class APIService {
     
     if (response?.token) {
       this.token = response.token;
+      this.userId = response.user.id.toString();
       await AsyncStorage.setItem('token', response.token);
       await AsyncStorage.setItem('userId', response.user.id.toString());
     }
@@ -167,17 +153,23 @@ export class APIService {
 
   async logout() {
     this.token = null;
+    this.userId = null;
     await AsyncStorage.multiRemove(['token', 'userId']);
   }
 
   // ========================= USER METHODS =========================
 
   async getUserById(id: number) {
-    return await this.makeRequest(`/api/users/${id}`);
+    const response = await this.makeRequest(`/api/users/${id}`);
+    // Backend response: { success: true, user: {...} }
+    return response?.user || response;
   }
 
   async getCurrentUser() {
-    return await this.makeRequest('/api/users/me');
+    const response = await this.makeRequest('/api/users/me');
+    // Backend response: { success: true, user: {...} }
+    console.log('📥 getCurrentUser raw response:', response);
+    return response?.user || response;
   }
 
   async updateUserBalance(userId: number, newBalance: number) {
@@ -306,11 +298,9 @@ export class APIService {
 
   getConnectionStatus() {
     return {
-      connected: this.isConnected,
       url: this.baseUrl,
       authenticated: !!this.token,
-      lastConnected: this.lastConnectedUrl,
-      reconnectAttempts: this.reconnectAttempts,
+      userId: this.userId,
     };
   }
 
@@ -329,17 +319,10 @@ export class APIService {
 
   // ========================= RESET & CLEANUP =========================
 
-  resetConnection(): void {
-    this.isConnected = false;
-    this.reconnectAttempts = 0;
-    this.lastConnectedUrl = '';
-    console.log('🧹 Connection reset to default');
-  }
-
   destroy(): void {
-    this.stopConnectionMonitoring();
-    this.resetConnection();
     this.token = null;
+    this.userId = null;
+    console.log('🧹 API Service destroyed');
   }
 }
 

@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
-import { callAPI, connectBackend } from './simpleBackend';
+import { apiService } from './apiService';
 
 /* -------------------------------------------------------------------------- */
 /*                              🔹 Type Definitions                            */
@@ -34,10 +34,7 @@ export const registerUser = async (
   username: string,
   password: string
 ): Promise<User> => {
-  return await callAPI('/api/auth/register', {
-    method: 'POST',
-    body: JSON.stringify({ name, username, password }),
-  });
+  return await apiService.register({ name, username, password });
 };
 
 /**
@@ -48,10 +45,7 @@ export const loginUser = async (
   password: string
 ): Promise<User | null> => {
   try {
-    const response = await callAPI('/api/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ username, password }),
-    });
+    const response = await apiService.login({ username, password });
 
     if (response?.token && response?.user?.id) {
       await AsyncStorage.setItem('token', response.token);
@@ -75,10 +69,7 @@ export const logoutUser = async (): Promise<void> => {
   try {
     const token = await AsyncStorage.getItem('token');
     if (token) {
-      await callAPI('/api/auth/logout', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      await apiService.logout();
     }
   } catch {
     // abaikan error logout
@@ -121,12 +112,7 @@ export const getUserById = async (id: number): Promise<User | null> => {
     }
     
     // STEP 2: Jika tidak ada di cache, ambil dari backend
-    const res = await callAPI('/api/users/me', {
-      method: 'GET',
-      headers: {
-        'x-user-id': id.toString()
-      }
-    });
+    const res = await apiService.getUserById(id);
     
     if (res && res.user) {
       // Simpan ke cache untuk next time
@@ -158,7 +144,7 @@ export const getUserById = async (id: number): Promise<User | null> => {
 
 export const getAllUsers = async (): Promise<User[]> => {
   try {
-    const res = await callAPI('/api/users');
+    const res = await apiService.getAllUsers();
     return Array.isArray(res) ? res : [];
   } catch {
     return [];
@@ -187,17 +173,11 @@ export const processPayment = async (
       deviceId: Platform.OS,
     };
 
-    const res = await callAPI('/api/transactions', {
-      method: 'POST',
-      body: JSON.stringify(payload),
-    });
+    // Untuk backend API, kita perlu senderId dan receiverId
+    // Karena hanya punya receiverUsername, kita skip backend call untuk sekarang
+    // TODO: implement user lookup by username di backend
+    console.log('⚠️ Backend transaction creation skipped - need receiverId lookup');
 
-    if (res?.transaction) {
-      console.log('✅ Transaksi berhasil:', res.transaction.id);
-      return true;
-    }
-
-    console.warn('⚠️ Transaksi gagal:', res);
     return false;
   } catch (error: any) {
     console.error('❌ Payment error:', error.message || error);
@@ -212,7 +192,7 @@ export const getUserTransactions = async (
   userId: number
 ): Promise<Transaction[]> => {
   try {
-    const res = await callAPI(`/api/transactions?userId=${userId}`);
+    const res = await apiService.getUserTransactions(userId);
     return Array.isArray(res) ? res : [];
   } catch {
     return [];
@@ -221,7 +201,7 @@ export const getUserTransactions = async (
 
 export const getAllTransactions = async (): Promise<Transaction[]> => {
   try {
-    const res = await callAPI('/api/transactions');
+    const res = await apiService.getAllTransactions();
     return Array.isArray(res) ? res : [];
   } catch {
     return [];
@@ -233,7 +213,7 @@ export const getAllTransactions = async (): Promise<Transaction[]> => {
 /* -------------------------------------------------------------------------- */
 export const getAdminStats = async () => {
   try {
-    const res = await callAPI('/api/admin/stats');
+    const res = await apiService.getAdminDashboard();
     return res || {
       totalUsers: 0,
       totalTransactions: 0,
@@ -286,19 +266,14 @@ export const syncBalanceFromBackend = async (userId: number): Promise<number | n
     console.log(`💰 Syncing balance for user ${userId}...`);
     
     // Kirim userId sebagai header untuk endpoint /api/users/me
-    const response = await callAPI('/api/users/me', { 
-      method: 'GET',
-      headers: {
-        'x-user-id': userId.toString()
-      }
-    });
+    const response = await apiService.getUserById(userId);
     
-    if (response && response.user && typeof response.user.balance === 'number') {
-      const newBalance = response.user.balance;
+    if (response && typeof response.balance === 'number') {
+      const newBalance = response.balance;
       
       // Update cache lokal dengan data user terbaru
       const cacheKey = `user_${userId}`;
-      await AsyncStorage.setItem(cacheKey, JSON.stringify(response.user));
+      await AsyncStorage.setItem(cacheKey, JSON.stringify(response));
       
       console.log(`✅ Balance synced from backend for user ${userId}: ${newBalance}`);
       return newBalance;

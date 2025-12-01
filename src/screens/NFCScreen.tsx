@@ -2,264 +2,85 @@ import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   StyleSheet,
   Alert,
-  TextInput,
+  ScrollView,
   ActivityIndicator,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { NFCService, NFCData } from '../utils/nfc';
-import { processPayment, getUserById } from '../utils/database';
-import { connectBackend, getBackendStatus, callAPI } from '../utils/simpleBackend';
+import { NFCService } from '../utils/nfc';
+import { useNFCScanner } from '../hooks/useNFCScanner';
+import { usePayment } from '../hooks/usePayment';
 
 interface NFCScreenProps {
   user: any;
   onBack: () => void;
 }
 
-type NFCMode = 'idle' | 'send' | 'receive' | 'scanning';
-
 export default function NFCScreen({ user, onBack }: NFCScreenProps) {
-  const [nfcSupported, setNfcSupported] = useState(false);
   const [nfcEnabled, setNfcEnabled] = useState(false);
-  const [mode, setMode] = useState<NFCMode>('idle');
   const [amount, setAmount] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [scanResult, setScanResult] = useState<string>('');
-  const [currentUserData, setCurrentUserData] = useState(user);
+  
+  const { isProcessing, processTapToPayTransfer } = usePayment();
 
-  // 🧮 Format currency
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat('id-ID', {
-      style: 'currency',
-      currency: 'IDR',
-      minimumFractionDigits: 0,
-    }).format(amount);
+  useEffect(() => {
+    checkNFC();
+    return () => {
+      NFCService.cleanup();
+    };
+  }, []);
 
-  // 🚀 Initialize NFC
-  const initializeNFC = async () => {
-    try {
-      const supported = await NFCService.initNFC();
-      setNfcSupported(supported);
-
-      if (supported) {
-        const enabled = await NFCService.checkNFCEnabled();
-        setNfcEnabled(enabled);
-      } else {
-        setNfcSupported(false);
-        setNfcEnabled(false);
-      }
-    } catch (error) {
-      console.error('❌ NFC initialization error:', error);
-      setNfcSupported(false);
-      setNfcEnabled(false);
+  const checkNFC = async () => {
+    const supported = await NFCService.initNFC();
+    if (supported) {
+      const enabled = await NFCService.checkNFCEnabled();
+      setNfcEnabled(enabled);
     }
   };
 
-  // 💸 Kirim uang via NFC
   const handleSendMoney = async () => {
-    if (!amount || parseFloat(amount) <= 0) {
-      Alert.alert('Error', 'Masukkan jumlah yang valid');
+    if (!user?.id) {
+      Alert.alert('Error', 'User tidak valid. Silakan login ulang.');
       return;
     }
 
     const amountNum = parseFloat(amount);
-    if (amountNum > currentUserData.balance) {
-      Alert.alert('Error', 'Saldo tidak mencukupi');
+    if (!amountNum || amountNum <= 0) {
+      Alert.alert('Error', 'Masukkan jumlah yang valid');
       return;
     }
 
-    setMode('send');
-    setLoading(true);
+    if (amountNum < 1000) {
+      Alert.alert('Error', 'Minimal transfer Rp 1.000');
+      return;
+    }
 
-    try {
-      const nfcData: NFCData = {
-        userId: currentUserData.id,
-        username: currentUserData.username,
-        action: 'payment',
-        amount: amountNum,
-      };
-
-      await NFCService.startNFCScanning(
-        async (receivedData) => {
-          if (receivedData && receivedData.action === 'receive') {
-            await processTransactionPayment(
-              currentUserData.username,
-              receivedData.username,
-              amountNum
-            );
-          } else {
-            Alert.alert('Error', 'Device penerima tidak valid');
-          }
-          await NFCService.stopNFCScanning();
-          setMode('idle');
-        },
-        (error) => {
-          console.error('NFC scanning error:', error);
-          Alert.alert('Error', 'Gagal melakukan scanning NFC');
-          setMode('idle');
-        }
-      );
-
-      setScanResult('Dekatkan ke device penerima...');
-    } catch (error) {
-      console.error('Send money error:', error);
-      Alert.alert('Error', 'Gagal mengirim uang');
-      setMode('idle');
-    } finally {
-      setLoading(false);
+    // Langsung transfer dengan tap kartu sender ke receiver
+    const success = await processTapToPayTransfer(user.id, amountNum);
+    
+    if (success) {
+      setAmount('');
     }
   };
 
-  // 💰 Terima uang via NFC
-  const handleReceiveMoney = async () => {
-    setMode('receive');
-    setLoading(true);
-
-    try {
-      const nfcData: NFCData = {
-        userId: currentUserData.id,
-        username: currentUserData.username,
-        action: 'receive',
-      };
-
-      await NFCService.startNFCScanning(
-        async (receivedData) => {
-          if (receivedData && receivedData.action === 'payment' && receivedData.amount) {
-            await processTransactionPayment(
-              receivedData.username,
-              currentUserData.username,
-              receivedData.amount
-            );
-          } else {
-            Alert.alert('Error', 'Data pembayaran tidak valid');
-          }
-          await NFCService.stopNFCScanning();
-          setMode('idle');
-        },
-        (error) => {
-          console.error('NFC scanning error:', error);
-          Alert.alert('Error', 'Gagal melakukan scanning NFC');
-          setMode('idle');
-        }
-      );
-
-      setScanResult('Dekatkan ke device pengirim...');
-    } catch (error) {
-      console.error('Receive money error:', error);
-      Alert.alert('Error', 'Gagal menerima uang');
-      setMode('idle');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // ⚙️ Kirim transaksi ke backend Prisma (JWT) + fallback ke lokal
-  const processTransactionPayment = async (
-    senderUsername: string,
-    receiverUsername: string,
-    amount: number
-  ) => {
-    try {
-      setLoading(true);
-      console.log(`💾 Mengirim transaksi ${amount} dari ${senderUsername} ke ${receiverUsername}`);
-
-      // 🔗 Kirim ke backend Express
-      const res = await callAPI('/api/transactions', {
-        method: 'POST',
-        body: JSON.stringify({ receiverUsername, amount, description: 'NFC Payment' }),
-      });
-
-      if (res && res.transaction) {
-        Alert.alert('✅ Sukses', `Transaksi ${formatCurrency(amount)} tersimpan di server!`);
-        await fetchLatestUserData();
-      } else {
-        console.warn('⚠️ Gagal tersimpan di server, mencoba lokal...');
-        const sender = await getUserById(currentUserData.id);
-        const receiver = await getUserById(currentUserData.id + 1); // contoh fallback sederhana
-        if (sender && receiver) {
-          const success = await processPayment(sender.id, receiver.username, amount);
-          if (success) await fetchLatestUserData();
-        }
-      }
-    } catch (error) {
-      console.error('Payment error:', error);
-      Alert.alert('⚠️ Offline', 'Server tidak bisa dihubungi, menyimpan lokal...');
-      const sender = await getUserById(currentUserData.id);
-      const receiver = await getUserById(currentUserData.id + 1);
-      if (sender && receiver) {
-        await processPayment(sender.id, receiver.username, amount);
-        await fetchLatestUserData();
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 🔄 Update saldo user
-  const fetchLatestUserData = async () => {
-    try {
-      const data = await callAPI(`/api/users/${currentUserData.id}`);
-      if (data) setCurrentUserData(data);
-    } catch {
-      const localUser = await getUserById(currentUserData.id);
-      if (localUser) setCurrentUserData(localUser);
-    }
-  };
-
-  // 🔌 Cek koneksi backend
-  const checkBackendConnection = async () => {
-    try {
-      const connected = await connectBackend();
-      console.log('Backend status:', getBackendStatus());
-      return connected;
-    } catch {
-      return false;
-    }
-  };
-
-  // 🧩 Init all
-  useEffect(() => {
-    const init = async () => {
-      await initializeNFC();
-      await checkBackendConnection();
-      await fetchLatestUserData();
-    };
-    init();
-    return () => NFCService.cleanup();
-  }, []);
-
-  const stopScanning = async () => {
-    await NFCService.stopNFCScanning();
-    setLoading(false);
-    setMode('idle');
-    setScanResult('');
-  };
-
-  // 📵 NFC tidak tersedia
-  if (!nfcSupported) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.centerContent}>
-          <Text style={styles.errorText}>📱 NFC tidak tersedia di Expo Go</Text>
-          <Text style={styles.infoText}>Gunakan build EAS (APK)</Text>
-          <TouchableOpacity style={styles.backButton} onPress={onBack}>
-            <Text style={styles.backButtonText}>Kembali</Text>
-          </TouchableOpacity>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  // 📡 NFC nonaktif
   if (!nfcEnabled) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centerContent}>
-          <Text style={styles.errorText}>📡 NFC tidak aktif</Text>
-          <Text style={styles.infoText}>Aktifkan NFC di Pengaturan</Text>
+          <Text style={styles.errorText}>📡 NFC Tidak Aktif</Text>
+          <Text style={styles.infoText}>
+            Untuk menggunakan pembayaran NFC, aktifkan NFC di HP Anda:
+          </Text>
+          <View style={styles.instructionBox}>
+            <Text style={styles.instructionText}>
+              1. Buka Pengaturan HP{'\n'}
+              2. Cari menu "Koneksi Perangkat" atau "NFC"{'\n'}
+              3. Aktifkan toggle NFC{'\n'}
+              4. Kembali ke aplikasi ini
+            </Text>
+          </View>
           <TouchableOpacity style={styles.backButton} onPress={onBack}>
             <Text style={styles.backButtonText}>Kembali</Text>
           </TouchableOpacity>
@@ -268,77 +89,85 @@ export default function NFCScreen({ user, onBack }: NFCScreenProps) {
     );
   }
 
-  // ✅ Tampilan utama
   return (
     <SafeAreaView style={styles.container}>
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={onBack}>
           <Text style={styles.backText}>← Kembali</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>NFC Payment</Text>
-        <View style={{ width: 60 }} />
+        <Text style={styles.title}>💳 NFC Payment</Text>
+        <View style={{ width: 70 }} />
       </View>
 
-      <View style={styles.content}>
-        <Text style={styles.userInfo}>
-          {currentUserData.name} • {formatCurrency(currentUserData.balance)}
-        </Text>
-
-        <View style={styles.statusContainer}>
-          <Text style={[styles.statusText, { color: '#27ae60' }]}>
-            🔗 Terhubung ke Backend Prisma
+      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+        {/* User Info */}
+        <View style={styles.userCard}>
+          <Text style={styles.userName}>👤 {user?.name}</Text>
+          <Text style={styles.userBalance}>
+            Balance: Rp {user?.balance?.toLocaleString('id-ID') || '0'}
           </Text>
         </View>
 
-        <View style={styles.amountContainer}>
-          <Text style={styles.label}>Jumlah Transfer:</Text>
+        {/* Info Card */}
+        <View style={styles.instructionCard}>
+          <Text style={styles.instructionTitle}>📖 Cara Transfer NFC:</Text>
+          <Text style={styles.instructionText}>
+            1. Masukkan jumlah transfer{'\n'}
+            2. Tekan tombol "Kirim Uang"{'\n'}
+            3. Tempelkan kartu NFC Anda ke HP{'\n'}
+            4. Tempelkan kartu NFC teman ke HP{'\n'}
+            5. Saldo teman otomatis bertambah! ✅
+          </Text>
+        </View>
+
+        {/* Amount Input */}
+        <View style={styles.inputCard}>
+          <Text style={styles.inputLabel}>💰 Jumlah Transfer:</Text>
           <TextInput
-            style={styles.amountInput}
+            style={styles.input}
+            placeholder="Contoh: 50000"
             keyboardType="numeric"
-            placeholder="Masukkan jumlah (Rp)"
             value={amount}
             onChangeText={setAmount}
+            editable={!isProcessing}
           />
+          <Text style={styles.inputHint}>Minimal Rp 1.000</Text>
         </View>
 
-        <View style={styles.actionsContainer}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.sendButton]}
-            onPress={handleSendMoney}
-            disabled={loading}
-          >
-            <Text style={styles.actionButtonText}>Kirim Uang</Text>
-            <Text style={styles.actionButtonSubtext}>Dekatkan HP ke penerima</Text>
-          </TouchableOpacity>
+        {/* Send Money Button */}
+        <TouchableOpacity
+          style={[
+            styles.actionButton,
+            styles.sendButton,
+            (!amount || isProcessing) && styles.disabledButton
+          ]}
+          onPress={handleSendMoney}
+          disabled={!amount || isProcessing}
+        >
+          {isProcessing ? (
+            <>
+              <ActivityIndicator color="white" />
+              <Text style={styles.actionButtonText}>  Processing...</Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.actionButtonText}>💸 Kirim Uang</Text>
+              <Text style={styles.actionButtonSubtext}>
+                Tap & tempelkan ke kartu penerima
+              </Text>
+            </>
+          )}
+        </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.actionButton, styles.receiveButton]}
-            onPress={handleReceiveMoney}
-            disabled={loading}
-          >
-            <Text style={styles.actionButtonText}>Terima Uang</Text>
-            <Text style={styles.actionButtonSubtext}>Tunggu pengirim mendekatkan HP</Text>
-          </TouchableOpacity>
-        </View>
-
-        {loading && (
-          <View style={styles.scanningContainer}>
-            <ActivityIndicator size="large" color="#3498db" />
-            <Text style={styles.scanningText}>Scanning NFC...</Text>
-            <Text style={styles.scanResult}>{scanResult}</Text>
-            <TouchableOpacity style={styles.cancelButton} onPress={stopScanning}>
-              <Text style={styles.cancelButtonText}>Batal</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }
 
-// 🎨 Styles (sama dengan versi kamu)
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
+  centerContent: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -348,73 +177,21 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#e0e0e0',
   },
-  backText: { color: '#3498db', fontSize: 16 },
+  backText: { color: '#3498db', fontSize: 16, width: 70 },
   title: { fontSize: 20, fontWeight: 'bold', color: '#2c3e50' },
-  content: { flex: 1, padding: 20 },
-  userInfo: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 20,
-    color: '#2c3e50',
-  },
-  statusContainer: {
-    backgroundColor: '#d5f4e6',
-    padding: 10,
-    borderRadius: 8,
-    marginBottom: 20,
-    alignItems: 'center',
-  },
-  statusText: { fontSize: 14, fontWeight: 'bold' },
-  amountContainer: { marginBottom: 30 },
-  label: { fontSize: 16, marginBottom: 8, color: '#34495e' },
-  amountInput: {
-    backgroundColor: 'white',
-    fontSize: 24,
-    padding: 16,
-    borderRadius: 8,
-    textAlign: 'center',
-    borderWidth: 2,
-    borderColor: '#3498db',
-  },
-  actionsContainer: { marginBottom: 30 },
-  actionButton: {
-    padding: 20,
-    borderRadius: 12,
-    marginBottom: 16,
-    alignItems: 'center',
-  },
-  sendButton: { backgroundColor: '#e74c3c' },
-  receiveButton: { backgroundColor: '#27ae60' },
-  actionButtonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 4,
-  },
-  actionButtonSubtext: {
-    color: 'rgba(255,255,255,0.9)',
-    fontSize: 14,
-  },
-  scanningContainer: { justifyContent: 'center', alignItems: 'center' },
-  scanningText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#2c3e50',
-    marginVertical: 10,
-  },
-  scanResult: { fontSize: 16, color: '#7f8c8d', textAlign: 'center' },
-  cancelButton: {
-    backgroundColor: '#95a5a6',
-    paddingHorizontal: 30,
-    paddingVertical: 12,
-    borderRadius: 8,
-    marginTop: 20,
-  },
-  cancelButtonText: { color: 'white', fontSize: 16, fontWeight: 'bold' },
-  centerContent: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  content: { flex: 1 },
+  contentContainer: { padding: 20 },
   errorText: { fontSize: 18, color: '#e74c3c', textAlign: 'center', marginBottom: 30 },
   infoText: { fontSize: 14, color: '#7f8c8d', textAlign: 'center', marginBottom: 20 },
+  instructionBox: {
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 12,
+    marginVertical: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: '#3498db',
+  },
+  instructionText: { fontSize: 14, color: '#2c3e50', lineHeight: 22 },
   backButton: {
     backgroundColor: '#3498db',
     paddingHorizontal: 30,
@@ -422,4 +199,90 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   backButtonText: { color: 'white', fontSize: 16, fontWeight: 'bold' },
+  userCard: {
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 12,
+    marginBottom: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  userName: { fontSize: 18, fontWeight: 'bold', color: '#2c3e50', marginBottom: 8 },
+  userBalance: { fontSize: 16, color: '#27ae60', fontWeight: '600' },
+  warningCard: {
+    backgroundColor: '#fff3cd',
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 15,
+    borderLeftWidth: 4,
+    borderLeftColor: '#f39c12',
+  },
+  warningText: { fontSize: 14, color: '#856404', textAlign: 'center' },
+  instructionCard: {
+    backgroundColor: '#e3f2fd',
+    padding: 20,
+    borderRadius: 12,
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: '#2196f3',
+  },
+  instructionTitle: { 
+    fontSize: 16, 
+    fontWeight: 'bold', 
+    color: '#1565c0', 
+    marginBottom: 12,
+    textAlign: 'center'
+  },
+  cardStatusCard: {
+    backgroundColor: '#d4edda',
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 15,
+    borderLeftWidth: 4,
+    borderLeftColor: '#27ae60',
+  },
+  cardStatusTitle: { fontSize: 16, fontWeight: 'bold', color: '#155724', marginBottom: 5 },
+  cardStatusUid: {
+    fontSize: 13,
+    color: '#155724',
+    fontFamily: 'monospace',
+    marginBottom: 3,
+  },
+  cardStatusSubtext: { fontSize: 12, color: '#155724' },
+  actionButton: {
+    backgroundColor: '#3498db',
+    padding: 18,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  scanCardButton: { backgroundColor: '#9b59b6' },
+  sendButton: { backgroundColor: '#27ae60' },
+  disabledButton: { backgroundColor: '#95a5a6', opacity: 0.6 },
+  actionButtonText: { color: 'white', fontSize: 18, fontWeight: 'bold', marginBottom: 4 },
+  actionButtonSubtext: { color: 'rgba(255, 255, 255, 0.9)', fontSize: 14 },
+  inputCard: {
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 12,
+    marginBottom: 15,
+  },
+  inputLabel: { fontSize: 16, fontWeight: '600', color: '#2c3e50', marginBottom: 10 },
+  input: {
+    backgroundColor: '#f8f9fa',
+    padding: 15,
+    borderRadius: 8,
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  inputHint: { fontSize: 12, color: '#7f8c8d', marginTop: 5 },
 });

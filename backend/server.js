@@ -17,6 +17,7 @@ const transactionRoutes = require('./routes/transactions');
 const fraudRoutes = require('./routes/fraud');
 const adminRoutes = require('./routes/admin');
 const deviceRoutes = require('./routes/devices');
+const nfcCardRoutes = require('./routes/nfcCards');
 
 // Middleware
 const { authenticateToken, authenticateAdmin } = require('./middleware/auth');
@@ -314,6 +315,7 @@ app.get('/admin', (req, res) =>
 // Public endpoints (no auth required)
 app.use('/api/auth', authRoutes);
 app.use('/api/devices', deviceRoutes);
+app.use('/api/nfc-cards', nfcCardRoutes); // NFC Card management
 
 // Protected endpoints (require auth)
 app.use('/api/users', authenticateToken, userRoutes);

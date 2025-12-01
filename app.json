@@ -14,7 +14,7 @@
     ],
     "android": {
       "package": "com.nfcpayment.app",
-      "versionCode": 10,
+      "versionCode": 14,
       "permissions": [
         "android.permission.NFC",
         "android.permission.WAKE_LOCK",
@@ -42,9 +42,9 @@
       "EXPO_PUBLIC_ADMIN_PORT": "3001",
       "EXPO_PUBLIC_PORT": "4000",
       "eas": {
-        "projectId": "4ece5684-5922-407d-a296-93580d8f235f"
+        "projectId": "ef194602-4e64-4774-b083-ff91cbb76d8a"
       }
     },
-    "owner": "adminskuy"
+    "owner": "aymm"
   }
 }

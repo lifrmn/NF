@@ -1,416 +1,286 @@
-// ============================================================================
-// DASHBOARD SCREEN - LAYAR UTAMA APLIKASI
-// ============================================================================
-// File ini menampilkan:
-// 1. Informasi saldo user
-// 2. Status koneksi backend
-// 3. Tombol NFC Payment
-// 4. Riwayat transaksi
-// ============================================================================
+// Dashboard Screen - Layar utama aplikasi NFC Payment
+// Menampilkan: saldo, status koneksi backend, menu NFC payment, dan riwayat transaksi
 
-// Import React hooks untuk state management
 import React, { useState, useEffect } from 'react';
-
-// Import komponen UI dari React Native
-import {
-  View,              // Container dasar
-  Text,              // Untuk menampilkan teks
-  TouchableOpacity,  // Button yang bisa diklik
-  StyleSheet,        // Untuk styling
-  ScrollView,        // Container yang bisa di-scroll
-  Alert,             // Untuk popup konfirmasi
-  RefreshControl,    // Untuk pull-to-refresh
-} from 'react-native';
-
-// SafeAreaView: Container yang aman dari notch iPhone dan navigation bar
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
-// AsyncStorage: Local storage untuk menyimpan data di device
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-// Import fungsi database lokal (SQLite) dan sync balance
 import { getUserById, getUserTransactions, syncBalanceFromBackend } from '../utils/database';
+import { apiService } from '../utils/apiService';
 
-// Import fungsi untuk koneksi ke backend
-import { connectBackend, getBackendStatus } from '../utils/simpleBackend';
-
-// ============================================================================
-// INTERFACE - TIPE DATA UNTUK PROPS
-// ============================================================================
-// Props adalah data yang dikirim dari parent component (App.tsx)
 interface DashboardScreenProps {
-  user: any;                     // Data user yang sedang login
-  onLogout: () => void;          // Fungsi untuk logout (dari App.tsx)
-  onNavigateToNFC: () => void;   // Fungsi untuk pindah ke NFC Screen
+  user: any;
+  onLogout: () => void;
+  onNavigateToNFC: () => void;
+  onNavigateToRegisterCard?: () => void;
+  onNavigateToMyCards?: () => void;
 }
 
-// ============================================================================
-// MAIN COMPONENT FUNCTION
-// ============================================================================
-export default function DashboardScreen({ user, onLogout, onNavigateToNFC }: DashboardScreenProps) {
+export default function DashboardScreen({ user, onLogout, onNavigateToNFC, onNavigateToRegisterCard, onNavigateToMyCards }: DashboardScreenProps) {
   
-  // ==========================================================================
-  // STATE VARIABLES - DATA YANG BERUBAH-UBAH DAN TRIGGER RE-RENDER
-  // ==========================================================================
-  
-  // currentUser: Data user terbaru (bisa berubah saat refresh)
-  // Contoh: { id: 1, username: 'budi', name: 'Budi', balance: 100000 }
-  const [currentUser, setCurrentUser] = useState(user);
-  
-  // transactions: Array berisi riwayat transaksi user
-  // Contoh: [{ id: 1, amount: 50000, sender: {...}, receiver: {...} }]
+  // State: currentUser (data terbaru), transactions (riwayat), loading (refresh status)
+  const [currentUser, setCurrentUser] = useState(user || null);
   const [transactions, setTransactions] = useState<any[]>([]);
-  
-  // loading: Status loading saat refresh data (true/false)
   const [loading, setLoading] = useState(false);
   
-  // backendStatus: Teks status koneksi backend
-  // Contoh: "Connected: http://192.168.137.1:4000" atau "Offline"
+  // State koneksi backend: backendStatus (teks), connectionStatus (connecting/connected/offline)
   const [backendStatus, setBackendStatus] = useState('Connecting...');
-  
-  // connectionStatus: Status koneksi dalam 3 kondisi
-  // - 'connecting': Sedang mencoba connect
-  // - 'connected': Berhasil connect
-  // - 'offline': Tidak connect (mode offline)
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'offline'>('connecting');
 
-  // ==========================================================================
-  // FUNGSI: refreshData()
-  // ==========================================================================
-  // Fungsi untuk memuat ulang data user dan transaksi
-  // Dipanggil saat:
-  // 1. Screen pertama kali dibuka (useEffect)
-  // 2. User pull-to-refresh (tarik layar ke bawah)
-  // 3. Setelah transaksi NFC selesai
-  // ==========================================================================
+  // refreshData: Reload user data dan transaksi dari database + sync balance dari backend
   const refreshData = async () => {
-    // Validasi: Cek apakah user valid
     if (!user || !user.id) {
       console.log('⚠️ No valid user for refresh data');
       return;
     }
     
-    // Set loading = true (tampilkan loading spinner)
     setLoading(true);
-    
     try {
-      // STEP 1: Sinkronisasi saldo dari backend terlebih dahulu
-      console.log('💰 Syncing balance from backend...');
-      const syncedBalance = await syncBalanceFromBackend(user.id);
-      
-      // STEP 2: Ambil data user terbaru dari database lokal
-      // Kenapa perlu refresh? Karena saldo bisa berubah setelah transaksi
+      // Ambil data user dari database lokal terlebih dahulu (cepat)
       const updatedUser = await getUserById(user.id);
       if (updatedUser) {
-        // Jika ada balance baru dari backend, gunakan itu
-        if (syncedBalance !== null) {
-          updatedUser.balance = syncedBalance;
-          console.log(`✅ Updated user balance from backend: ${syncedBalance}`);
-        }
-        setCurrentUser(updatedUser);  // Update state dengan data terbaru
+        setCurrentUser(updatedUser);
+        console.log('💾 Loaded user from local DB');
       }
 
-      // STEP 2: Ambil riwayat transaksi user dari database lokal
-      // getUserTransactions() return array transaksi (sent + received)
+      // Ambil riwayat transaksi dari lokal
       const userTransactions = await getUserTransactions(user.id);
-      setTransactions(userTransactions);
+      setTransactions(userTransactions || []);
 
-      // STEP 3: Cek status koneksi backend
-      await checkBackendStatus();
+      // Sync balance dari backend (optional, hanya jika koneksi bagus)
+      try {
+        console.log('💰 Syncing balance from backend...');
+        const syncedBalance = await syncBalanceFromBackend(user.id);
+        if (syncedBalance !== null && typeof syncedBalance === 'number' && updatedUser) {
+          updatedUser.balance = syncedBalance;
+          setCurrentUser(updatedUser);
+          console.log(`✅ Updated user balance from backend: ${syncedBalance}`);
+        }
+      } catch (syncError: any) {
+        // Silent fail untuk rate limit errors
+        if (syncError.message?.includes('429')) {
+          console.log('⏱️ Rate limited, using cached balance');
+        } else {
+          console.warn('⚠️ Balance sync failed, using local data:', syncError.message);
+        }
+      }
       
     } catch (error) {
-      // Jika ada error, tampilkan alert ke user
       console.error('Error refreshing data:', error);
-      Alert.alert('Error', 'Gagal memuat data terbaru');
-      
+      if (!currentUser || !currentUser.id) {
+        Alert.alert('Error', 'Gagal memuat data terbaru');
+      }
     } finally {
-      // Set loading = false (sembunyikan loading spinner)
-      // finally = dijalankan apapun hasilnya (sukses/error)
       setLoading(false);
     }
   };
 
-  // ==========================================================================
-  // FUNGSI: checkBackendStatus()
-  // ==========================================================================
-  // Fungsi untuk mengecek apakah backend server bisa diakses
-  // Backend server biasanya di laptop dengan IP: http://192.168.137.1:4000
-  // Dipanggil setiap 10 detik (auto-check) dan saat user klik tombol refresh
-  // ==========================================================================
+  // checkBackendStatus: Cek koneksi ke backend server (health check)
   const checkBackendStatus = async () => {
     try {
-      // STEP 1: Coba connect ke backend
-      // connectBackend() akan scan network dan cari backend server
-      const connected = await connectBackend();
+      setConnectionStatus('connecting');
+      const healthCheck = await apiService.healthCheck();
+      const status = apiService.getConnectionStatus();
       
-      // STEP 2: Ambil informasi status backend (baseUrl, etc)
-      const status = await getBackendStatus();
+      console.log('🔍 Health check response:', healthCheck);
       
-      // STEP 3: Update UI berdasarkan hasil
-      if (connected) {
-        // Berhasil connect: Tampilkan URL backend
-        setBackendStatus(`Connected: ${status.baseUrl}`);
+      if (healthCheck && (healthCheck.status === 'ok' || healthCheck.status === 'OK')) {
+        console.log('✅ Backend connected:', status.url);
+        setBackendStatus(`Connected: ${status.url || 'Backend Server'}`);
         setConnectionStatus('connected');
       } else {
-        // Gagal connect: Mode offline
-        setBackendStatus('Offline');
+        console.log('⚠️ Backend response invalid:', healthCheck);
+        setBackendStatus('Offline Mode');
         setConnectionStatus('offline');
       }
-      
-    } catch (error) {
-      // Jika terjadi error: Set status offline
-      setBackendStatus('Error');
-      setConnectionStatus('offline');
+    } catch (error: any) {
+      // Handle rate limiting gracefully
+      if (error.message?.includes('429')) {
+        console.log('⏱️ Rate limited, backend status unknown');
+        setBackendStatus('Rate Limited - Using Cache');
+        setConnectionStatus('offline');
+      } else {
+        console.log('❌ Backend connection check failed:', error);
+        setBackendStatus('Offline Mode');
+        setConnectionStatus('offline');
+      }
     }
   };
 
-  // ==========================================================================
-  // USEEFFECT HOOK - DIJALANKAN SAAT COMPONENT PERTAMA KALI MUNCUL
-  // ==========================================================================
-  // useEffect dengan [] (empty dependency) = hanya dijalankan 1 kali saat mount
-  // ==========================================================================
+  // useEffect: Load data awal dan auto-check backend setiap 90 detik (dikurangi untuk prevent rate limit)
   useEffect(() => {
-    // STEP 1: Load data awal (user + transactions)
     refreshData();
-    
-    // STEP 2: Cek koneksi backend
-    checkBackendStatus();
-    
-    // STEP 3: Set interval untuk auto-check backend setiap 10 detik
-    // Ini membuat status koneksi selalu update otomatis
-    // setInterval = fungsi yang dijalankan berulang setiap X miliseconds
-    const statusInterval = setInterval(checkBackendStatus, 10000);  // 10000ms = 10 detik
-    
-    // CLEANUP FUNCTION: Dijalankan saat component di-unmount (screen ditutup)
-    // Penting untuk stop interval agar tidak memory leak
-    return () => clearInterval(statusInterval);
-    
-  }, []);  // [] = tidak ada dependency, hanya run 1x saat mount
+    // Delay health check untuk prevent simultaneous requests
+    const initialHealthCheck = setTimeout(() => checkBackendStatus(), 3000);
+    // Auto-check setiap 90 detik (reduced from 30s untuk prevent Ngrok rate limit)
+    const statusInterval = setInterval(checkBackendStatus, 90000);
+    return () => {
+      clearTimeout(initialHealthCheck);
+      clearInterval(statusInterval);
+    };
+  }, []);
 
-  // ==========================================================================
-  // FUNGSI: formatCurrency()
-  // ==========================================================================
-  // Fungsi untuk format angka menjadi format Rupiah
-  // Input: 100000 → Output: "Rp100.000"
-  // Menggunakan Intl.NumberFormat (built-in JavaScript untuk format currency)
-  // ==========================================================================
+  // Utility: Format angka ke Rupiah (100000 → Rp100.000)
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('id-ID', {      // Locale Indonesia
-      style: 'currency',                         // Format sebagai currency
-      currency: 'IDR',                           // Mata uang: Indonesian Rupiah
-      minimumFractionDigits: 0,                  // Tidak pakai desimal (.00)
+    return new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      minimumFractionDigits: 0,
     }).format(amount);
   };
 
-  // ==========================================================================
-  // FUNGSI: formatDate()
-  // ==========================================================================
-  // Fungsi untuk format tanggal menjadi format Indonesia
-  // Input: "2024-01-15T10:30:00.000Z" → Output: "15/01/2024, 10:30"
-  // ==========================================================================
+  // Utility: Format tanggal ke format Indonesia (dd/mm/yyyy, hh:mm)
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);           // Convert string ke Date object
-    return date.toLocaleDateString('id-ID', {    // Format locale Indonesia
-      day: '2-digit',      // Hari: 01, 02, ..., 31
-      month: '2-digit',    // Bulan: 01, 02, ..., 12
-      year: 'numeric',     // Tahun: 2024
-      hour: '2-digit',     // Jam: 00, 01, ..., 23
-      minute: '2-digit',   // Menit: 00, 01, ..., 59
+    const date = new Date(dateString);
+    return date.toLocaleDateString('id-ID', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
     });
   };
 
-  // ==========================================================================
-  // FUNGSI: handleLogout()
-  // ==========================================================================
-  // Fungsi untuk logout dengan konfirmasi
-  // Alert.alert = popup konfirmasi (seperti confirm dialog di web)
-  // ==========================================================================
+  // handleLogout: Tampilkan konfirmasi logout
   const handleLogout = () => {
     console.log('🔘 Logout button pressed');
-    
-    // Tampilkan popup konfirmasi dengan 2 tombol
     Alert.alert(
-      'Logout',                              // Title popup
-      'Apakah Anda yakin ingin keluar?',     // Message popup
+      'Logout',
+      'Apakah Anda yakin ingin keluar?',
       [
-        // TOMBOL 1: Batal (cancel logout)
-        { 
-          text: 'Batal', 
-          style: 'cancel',                   // Style biru (default)
-          onPress: () => console.log('❌ Logout cancelled')
-        },
-        
-        // TOMBOL 2: Keluar (confirm logout)
-        { 
-          text: 'Keluar', 
-          onPress: () => {
-            console.log('✅ Logout confirmed, calling onLogout');
-            // Panggil fungsi onLogout dari App.tsx
-            // onLogout() akan clear AsyncStorage dan reset state di App.tsx
-            onLogout();
-          }, 
-          style: 'destructive'               // Style merah (destructive action)
-        },
+        { text: 'Batal', style: 'cancel', onPress: () => console.log('❌ Logout cancelled') },
+        { text: 'Keluar', onPress: () => { console.log('✅ Logout confirmed, calling onLogout'); onLogout(); }, style: 'destructive' },
       ]
     );
   };
 
-  // ==========================================================================
-  // RETURN JSX - UI YANG DITAMPILKAN DI LAYAR
-  // ==========================================================================
+  // Safety check: Early return jika currentUser tidak ada
+  if (!currentUser) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading user data...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
   return (
-    // SafeAreaView: Container yang aman dari notch iPhone (area atas/bawah)
     <SafeAreaView style={styles.container}>
-      
-      {/* ScrollView: Container yang bisa di-scroll */}
-      {/* RefreshControl: Enable pull-to-refresh (tarik ke bawah untuk refresh) */}
       <ScrollView
         style={styles.scrollView}
-        refreshControl={
-          <RefreshControl 
-            refreshing={loading}           // Tampilkan spinner jika loading=true
-            onRefresh={refreshData}        // Fungsi yang dipanggil saat pull-to-refresh
-          />
-        }
+        refreshControl={<RefreshControl refreshing={loading} onRefresh={refreshData} />}
       >
-        
-        {/* ================================================================ */}
-        {/* SECTION 1: HEADER - Greeting + Logout Button */}
-        {/* ================================================================ */}
+        {/* SECTION 1: Header - Greeting + Logout */}
         <View style={styles.header}>
-          {/* Left side: Greeting text */}
           <View>
             <Text style={styles.greeting}>Selamat datang,</Text>
-            <Text style={styles.userName}>{currentUser.name}</Text>
+            <Text style={styles.userName}>{currentUser?.name || 'User'}</Text>
           </View>
-          
-          {/* Right side: Logout button */}
-          <TouchableOpacity 
-            style={styles.logoutButton} 
-            onPress={handleLogout}       // Panggil fungsi handleLogout saat diklik
-            activeOpacity={0.7}          // Opacity saat ditekan (0.7 = agak transparan)
-            hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}  // Expand area klik
-          >
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout} activeOpacity={0.7} hitSlop={{ top: 15, bottom: 15, left: 15, right: 15 }}>
             <Text style={styles.logoutText}>Keluar</Text>
           </TouchableOpacity>
         </View>
 
-        {/* ================================================================ */}
-        {/* SECTION 2: BALANCE CARD - Tampilkan saldo user */}
-        {/* ================================================================ */}
+        {/* SECTION 2: Balance Card */}
         <View style={styles.balanceCard}>
           <View style={styles.balanceHeader}>
             <Text style={styles.balanceLabel}>Saldo Anda</Text>
-            {/* Tombol refresh saldo */}
-            <TouchableOpacity 
-              style={styles.refreshButton} 
-              onPress={refreshData}
-              activeOpacity={0.7}
-            >
+            <TouchableOpacity style={styles.refreshButton} onPress={refreshData} activeOpacity={0.7}>
               <Text style={styles.refreshButtonText}>🔄</Text>
             </TouchableOpacity>
           </View>
-          <Text style={styles.balanceAmount}>
-            {/* Tampilkan saldo dengan format Rupiah */}
-            {formatCurrency(currentUser.balance)}
-          </Text>
-          <Text style={styles.balanceSubtext}>
-            Username: {currentUser.username}
-          </Text>
-          <Text style={styles.syncInfo}>
-            Pull ke bawah atau klik 🔄 untuk sync saldo
-          </Text>
+          <Text style={styles.balanceAmount}>{formatCurrency(currentUser?.balance || 0)}</Text>
+          <Text style={styles.balanceSubtext}>Username: {currentUser?.username || 'Loading...'}</Text>
+          <Text style={styles.syncInfo}>Pull ke bawah atau klik 🔄 untuk sync saldo</Text>
         </View>
 
-        {/* ================================================================ */}
-        {/* SECTION 3: CONNECTION STATUS - Status koneksi ke backend */}
-        {/* ================================================================ */}
-        {/* Backend server diperlukan untuk:
-             - Sync data ke database pusat (PostgreSQL)
-             - Fraud detection dengan data history lengkap
-             - Admin dashboard monitoring
-             Mode offline tetap bisa untuk:
-             - NFC payment (data tersimpan di local SQLite)
-             - View balance dan transactions lokal
-        */}
-{/* ADMIN STATUS SECTION HIDDEN BY USER REQUEST */}
-
-        {/* ================================================================ */}
-        {/* SECTION 4: NFC BUTTON - Tombol untuk masuk ke NFC Screen */}
-        {/* ================================================================ */}
-        {/* NFC Payment:
-             - Pembayaran tanpa internet (peer-to-peer)
-             - Transfer uang dari HP ke HP menggunakan NFC
-             - Data dikirim dalam format NDEF (NFC Data Exchange Format)
-             - Fraud detection dijalankan secara real-time
-        */}
-        <View style={styles.actionsContainer}>
-          <TouchableOpacity 
-            style={styles.nfcButton}
-            onPress={onNavigateToNFC}    // Navigate ke NFCScreen
-          >
-            <Text style={styles.nfcButtonText}>💳 NFC Payment</Text>
-            <Text style={styles.nfcButtonSubtext}>
-              Kirim atau terima pembayaran melalui NFC
+        {/* SECTION 3: Connection Status - Backend online/offline status */}
+        <View style={styles.connectionCard}>
+          <View style={styles.connectionHeader}>
+            <Text style={styles.connectionTitle}>Status Koneksi</Text>
+            <TouchableOpacity style={styles.reconnectButton} onPress={checkBackendStatus} activeOpacity={0.7}>
+              <Text style={styles.reconnectText}>🔄</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.connectionRow}>
+            <View style={[styles.statusDot, {
+              backgroundColor: connectionStatus === 'connected' ? '#27ae60' : connectionStatus === 'connecting' ? '#f39c12' : '#e74c3c'
+            }]} />
+            <Text style={styles.connectionText}>
+              {connectionStatus === 'connected' ? 'Terhubung' : connectionStatus === 'connecting' ? 'Menghubungkan...' : 'Offline'}
             </Text>
-          </TouchableOpacity>
+          </View>
+          <Text style={styles.connectionSubtext}>{backendStatus || 'Loading...'}</Text>
+          {connectionStatus === 'offline' && (
+            <Text style={styles.attemptsText}>Mode offline aktif - Data tersimpan lokal</Text>
+          )}
         </View>
 
-        {/* ================================================================ */}
-        {/* SECTION 5: TRANSACTION HISTORY - Riwayat transaksi */}
-        {/* ================================================================ */}
+        {/* SECTION 4: Action Buttons - Menu utama */}
+        <View style={styles.actionsContainer}>
+          <TouchableOpacity style={styles.nfcButton} onPress={onNavigateToNFC}>
+            <Text style={styles.nfcButtonText}>💳 NFC Payment</Text>
+            <Text style={styles.nfcButtonSubtext}>Kirim atau terima pembayaran melalui NFC</Text>
+          </TouchableOpacity>
+          
+          {/* Info: 1 USER = 1 CARD Policy */}
+          <View style={styles.cardPolicyInfo}>
+            <Text style={styles.cardPolicyText}>📌 Kebijakan: 1 USER = 1 CARD</Text>
+            <Text style={styles.cardPolicySubtext}>Setiap user hanya dapat mendaftarkan satu kartu NFC</Text>
+          </View>
+          
+          <View style={styles.cardButtonsRow}>
+            <TouchableOpacity style={styles.cardButton} onPress={onNavigateToRegisterCard || (() => {})}>
+              <Text style={styles.cardButtonIcon}>➕</Text>
+              <Text style={styles.cardButtonText}>Daftar Kartu</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.cardButton, styles.myCardsButton]} 
+              onPress={() => {
+                console.log('🎴 My Cards button pressed');
+                if (onNavigateToMyCards) {
+                  onNavigateToMyCards();
+                } else {
+                  console.warn('⚠️ onNavigateToMyCards is not defined');
+                }
+              }}
+            >
+              <Text style={styles.cardButtonIcon}>🎴</Text>
+              <Text style={styles.cardButtonText}>Kartu Saya</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* SECTION 5: Transaction History */}
         <View style={styles.transactionsContainer}>
           <Text style={styles.sectionTitle}>Riwayat Transaksi</Text>
-          
-          {/* Conditional Rendering: Tampilkan empty state atau list */}
           {transactions.length === 0 ? (
-            // CASE 1: Tidak ada transaksi
             <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>
-                Belum ada transaksi
-              </Text>
+              <Text style={styles.emptyStateText}>Belum ada transaksi</Text>
             </View>
           ) : (
-            // CASE 2: Ada transaksi, tampilkan list
-            // map() = loop array untuk render setiap item
             transactions.map((transaction, index) => {
-              
-              // Tentukan apakah user adalah penerima atau pengirim
+              if (!currentUser?.id) return null;
               const isReceiver = transaction.receiverId === currentUser.id;
-              
-              // Ambil data user lawan (sender atau receiver)
-              // Contoh: Jika user adalah receiver, maka otherUser = sender
               const otherUser = isReceiver ? transaction.sender : transaction.receiver;
+              if (!otherUser) return null;
               
               return (
-                // key={index} penting untuk React list rendering
                 <View key={index} style={styles.transactionItem}>
-                  {/* Left side: Info transaksi */}
                   <View style={styles.transactionInfo}>
-                    {/* Icon dan tipe transaksi */}
                     <Text style={styles.transactionType}>
                       {isReceiver ? '📥 Diterima dari' : '📤 Dikirim ke'}
                     </Text>
-                    
-                    {/* Nama dan username lawan transaksi */}
                     <Text style={styles.transactionUser}>
-                      {otherUser.name} (@{otherUser.username})
+                      {(otherUser?.name || 'Unknown')} (@{otherUser?.username || 'unknown'})
                     </Text>
-                    
-                    {/* Tanggal transaksi */}
                     <Text style={styles.transactionDate}>
-                      {formatDate(transaction.createdAt)}
+                      {formatDate(transaction.createdAt || new Date().toISOString())}
                     </Text>
                   </View>
-                  
-                  {/* Right side: Amount dengan warna dinamis */}
-                  <Text style={[
-                    styles.transactionAmount,
-                    // Style conditional: hijau untuk received, merah untuk sent
-                    isReceiver ? styles.positiveAmount : styles.negativeAmount
-                  ]}>
-                    {/* Tampilkan + atau - sesuai tipe transaksi */}
-                    {isReceiver ? '+' : '-'}{formatCurrency(transaction.amount)}
+                  <Text style={[styles.transactionAmount, isReceiver ? styles.positiveAmount : styles.negativeAmount]}>
+                    {isReceiver ? '+' : '-'}{formatCurrency(transaction.amount || 0)}
                   </Text>
                 </View>
               );
@@ -498,6 +368,7 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: 12,
     alignItems: 'center',
+    marginBottom: 12,
   },
   nfcButtonText: {
     color: 'white',
@@ -509,6 +380,35 @@ const styles = StyleSheet.create({
     color: 'rgba(255, 255, 255, 0.9)',
     fontSize: 14,
     textAlign: 'center',
+  },
+  cardButtonsRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  cardButton: {
+    flex: 1,
+    backgroundColor: '#e91e63',
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  myCardsButton: {
+    backgroundColor: '#9c27b0',
+  },
+  cardButtonIcon: {
+    fontSize: 24,
+    marginBottom: 4,
+  },
+  cardButtonText: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: 'bold',
   },
   transactionsContainer: {
     paddingHorizontal: 20,
@@ -651,5 +551,34 @@ const styles = StyleSheet.create({
     color: '#666',
     marginTop: 2,
     fontStyle: 'italic',
+  },
+  cardPolicyInfo: {
+    backgroundColor: '#fff3cd',
+    padding: 12,
+    marginHorizontal: 20,
+    marginBottom: 12,
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: '#ffc107',
+  },
+  cardPolicyText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#856404',
+    marginBottom: 4,
+  },
+  cardPolicySubtext: {
+    fontSize: 12,
+    color: '#856404',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#666',
+    textAlign: 'center',
   },
 });

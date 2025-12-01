@@ -13,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import CustomButton from '../components/CustomButton';
 import { loginUser } from '../utils/database';
-import { callAPI } from '../utils/simpleBackend'; // 🔥 backend online login fallback
+import { apiService } from '../utils/apiService'; // 🔥 unified API service
 
 interface LoginScreenProps {
   onLogin: (user: any) => void;
@@ -40,10 +40,7 @@ export default function LoginScreen({ onLogin, onNavigateToRegister }: LoginScre
 
       // 1️⃣ Coba login via BACKEND API
       try {
-        const response = await callAPI('/api/auth/login', {
-          method: 'POST',
-          body: JSON.stringify({ username, password }),
-        });
+        const response = await apiService.login({ username, password });
 
         if (response?.token && response?.user) {
           const userData = response.user;

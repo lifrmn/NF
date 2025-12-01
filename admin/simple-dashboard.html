@@ -604,6 +604,58 @@
                 </div>
             </div>
         </div>
+
+        <!-- NFC CARD MANAGEMENT SECTION -->
+        <div class="section" style="border-left: 4px solid #e91e63;">
+            <div class="section-header" style="color: #c2185b; display: flex; justify-content: space-between; align-items: center;">
+                <span>🎴 NFC Card Management - Kelola Kartu Fisik</span>
+                <button class="btn btn-sm" onclick="showRegisterCardModal()" style="background: #e91e63; color: white; padding: 8px 20px;">
+                    ➕ Register Kartu Baru
+                </button>
+            </div>
+            <div class="section-content">
+                <div style="padding: 10px; background: #fce4ec; border-radius: 4px; margin-bottom: 15px; font-size: 13px;">
+                    <strong>💡 Penjelasan:</strong> Kelola kartu NFC fisik (NTag215 13.56MHz) yang terdaftar di sistem.
+                    <ul style="margin: 8px 0 0 20px; line-height: 1.8;">
+                        <li><strong>Register Kartu:</strong> Daftarkan kartu NFC baru dengan UID unik</li>
+                        <li><strong>Link ke User:</strong> Hubungkan kartu dengan akun pengguna</li>
+                        <li><strong>Top-up Saldo:</strong> Isi saldo kartu (memerlukan password admin)</li>
+                        <li><strong>Block/Unblock:</strong> Blokir atau aktifkan kembali kartu</li>
+                        <li><strong>Status:</strong> ACTIVE (hijau), BLOCKED (merah), LOST (abu-abu), EXPIRED (kuning)</li>
+                        <li><strong>History:</strong> Lihat riwayat transaksi per kartu</li>
+                    </ul>
+                </div>
+
+                <!-- Filter dan Search -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 10px; margin-bottom: 15px;">
+                    <input type="text" id="cardSearchInput" placeholder="🔍 Cari Card ID atau User..." 
+                           style="padding: 10px; border: 1px solid #ddd; border-radius: 4px;"
+                           onkeyup="filterCards()">
+                    <select id="cardStatusFilter" onchange="filterCards()" 
+                            style="padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                        <option value="">📊 Semua Status</option>
+                        <option value="ACTIVE">✅ ACTIVE</option>
+                        <option value="BLOCKED">🚫 BLOCKED</option>
+                        <option value="LOST">❌ LOST</option>
+                        <option value="EXPIRED">⚠️ EXPIRED</option>
+                    </select>
+                    <select id="cardLinkFilter" onchange="filterCards()"
+                            style="padding: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                        <option value="">👤 Semua Kartu</option>
+                        <option value="linked">🔗 Linked (dengan user)</option>
+                        <option value="unlinked">⭕ Unlinked (belum link)</option>
+                    </select>
+                    <button class="btn" onclick="refreshCards()" style="background: #16a085; color: white;">
+                        🔄 Refresh
+                    </button>
+                </div>
+
+                <!-- Cards List -->
+                <div id="nfcCardsList" class="device-grid">
+                    <div class="no-data">Loading NFC cards...</div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -616,6 +668,8 @@
         let activityLogEntries = [];
         let autoRefresh = true; // Auto refresh AKTIF by default untuk monitoring real-time
         let refreshInterval = null;
+        let nfcCards = []; // Array untuk menyimpan data kartu NFC
+        let filteredNfcCards = []; // Array untuk hasil filter
 
         // =================================================================
         // ACTIVITY LOG - Monitor semua pergerakan
@@ -1418,6 +1472,489 @@
             loadFraudAlerts(); // Load fraud alerts
             loadAllTransactions(); // Load transaksi
             loadAllUsers(); // Load users
+            loadNFCCards(); // Load NFC cards
+        }
+
+        // ==================== FUNGSI NFC CARD MANAGEMENT ====================
+        
+        // Load semua kartu NFC dari backend
+        async function loadNFCCards() {
+            try {
+                logActivity('system', '🔄 Loading NFC cards...', '#3498db');
+                
+                const response = await fetch('/api/nfc-cards', {
+                    headers: {
+                        'x-app-key': 'NFC2025SecureApp',
+                        'user-agent': 'okhttp/4.9.0'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        nfcCards = data.cards || [];
+                        filteredNfcCards = nfcCards;
+                        
+                        logActivity('system', `✅ Loaded ${nfcCards.length} NFC cards`, '#27ae60');
+                        renderNFCCards();
+                    } else {
+                        console.error('Failed to load NFC cards:', data.error);
+                        logActivity('error', `❌ Failed to load cards: ${data.error}`, '#e74c3c');
+                        document.getElementById('nfcCardsList').innerHTML = 
+                            '<div class="no-data">❌ Failed to load NFC cards: ' + (data.error || 'Unknown error') + '</div>';
+                    }
+                } else {
+                    console.error('Failed to load NFC cards:', response.statusText);
+                    logActivity('error', `❌ HTTP ${response.status}: ${response.statusText}`, '#e74c3c');
+                    document.getElementById('nfcCardsList').innerHTML = 
+                        '<div class="no-data">❌ Failed to load NFC cards (HTTP ' + response.status + ')</div>';
+                }
+            } catch (err) {
+                console.error('Load NFC cards error:', err);
+                logActivity('error', `❌ Error: ${err.message}`, '#e74c3c');
+                document.getElementById('nfcCardsList').innerHTML = 
+                    '<div class="no-data">❌ Error loading cards: ' + err.message + '</div>';
+            }
+        }
+
+        // Refresh NFC cards
+        function refreshCards() {
+            logActivity('action', '🔄 Refreshing NFC cards...', '#16a085');
+            loadNFCCards();
+        }
+
+        // Filter kartu berdasarkan search dan filter
+        function filterCards() {
+            const searchTerm = document.getElementById('cardSearchInput').value.toLowerCase();
+            const statusFilter = document.getElementById('cardStatusFilter').value;
+            const linkFilter = document.getElementById('cardLinkFilter').value;
+
+            filteredNfcCards = nfcCards.filter(card => {
+                // Search filter
+                const matchSearch = !searchTerm || 
+                    card.cardId.toLowerCase().includes(searchTerm) ||
+                    (card.userId && card.user && (
+                        card.user.username.toLowerCase().includes(searchTerm) ||
+                        card.user.name.toLowerCase().includes(searchTerm)
+                    ));
+
+                // Status filter
+                const matchStatus = !statusFilter || card.cardStatus === statusFilter;
+
+                // Link filter
+                const matchLink = !linkFilter || 
+                    (linkFilter === 'linked' && card.userId) ||
+                    (linkFilter === 'unlinked' && !card.userId);
+
+                return matchSearch && matchStatus && matchLink;
+            });
+
+            logActivity('system', `🔍 Filtered: ${filteredNfcCards.length} of ${nfcCards.length} cards`, '#95a5a6');
+            renderNFCCards();
+        }
+
+        // Render daftar kartu NFC
+        function renderNFCCards() {
+            const container = document.getElementById('nfcCardsList');
+            
+            if (filteredNfcCards.length === 0) {
+                container.innerHTML = '<div class="no-data">No NFC cards found</div>';
+                return;
+            }
+
+            container.innerHTML = filteredNfcCards.map(card => {
+                const statusColors = {
+                    'ACTIVE': '#27ae60',
+                    'BLOCKED': '#e74c3c',
+                    'LOST': '#95a5a6',
+                    'EXPIRED': '#f39c12'
+                };
+                const statusIcons = {
+                    'ACTIVE': '✅',
+                    'BLOCKED': '🚫',
+                    'LOST': '❌',
+                    'EXPIRED': '⚠️'
+                };
+                
+                const statusColor = statusColors[card.cardStatus] || '#95a5a6';
+                const statusIcon = statusIcons[card.cardStatus] || '❓';
+                const linkedStatus = card.userId 
+                    ? `🔗 Linked: ${card.user?.username || 'Unknown'}` 
+                    : '⭕ Unlinked';
+                
+                return `
+                    <div class="device-item" style="border-left: 4px solid ${statusColor};">
+                        <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 10px;">
+                            <div>
+                                <strong style="font-size: 14px;">🎴 ${card.cardId.substring(0, 16)}...</strong>
+                                <div style="font-size: 12px; color: #7f8c8d; margin-top: 3px;">
+                                    ${card.cardType} • ${card.frequency}
+                                </div>
+                            </div>
+                            <span style="background: ${statusColor}; color: white; padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: bold;">
+                                ${statusIcon} ${card.cardStatus}
+                            </span>
+                        </div>
+                        
+                        <div style="background: #f8f9fa; padding: 10px; border-radius: 4px; margin-bottom: 10px;">
+                            <div style="font-size: 13px; margin-bottom: 5px;">
+                                <strong>👤 User:</strong> ${linkedStatus}
+                            </div>
+                            <div style="font-size: 13px; margin-bottom: 5px;">
+                                <strong>💰 Balance:</strong> Rp ${card.balance.toLocaleString('id-ID')}
+                            </div>
+                            <div style="font-size: 11px; color: #7f8c8d;">
+                                Registered: ${new Date(card.createdAt).toLocaleDateString('id-ID')}
+                            </div>
+                        </div>
+
+                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 5px;">
+                            ${card.userId 
+                                ? `<button class="btn btn-sm" onclick="showUnlinkCardModal('${card.cardId}')" style="background: #95a5a6; color: white; padding: 6px;">
+                                    🔗 Unlink
+                                </button>`
+                                : `<button class="btn btn-sm" onclick="showLinkCardModal('${card.cardId}')" style="background: #3498db; color: white; padding: 6px;">
+                                    🔗 Link User
+                                </button>`
+                            }
+                            <button class="btn btn-sm" onclick="showTopupCardModal('${card.cardId}', ${card.balance})" style="background: #27ae60; color: white; padding: 6px;">
+                                💰 Top-up
+                            </button>
+                            ${card.cardStatus === 'ACTIVE' 
+                                ? `<button class="btn btn-sm" onclick="blockCard('${card.cardId}')" style="background: #e74c3c; color: white; padding: 6px;">
+                                    🚫 Block
+                                </button>`
+                                : `<button class="btn btn-sm" onclick="unblockCard('${card.cardId}')" style="background: #27ae60; color: white; padding: 6px;">
+                                    ✅ Unblock
+                                </button>`
+                            }
+                            <button class="btn btn-sm" onclick="showCardHistory('${card.cardId}')" style="background: #9b59b6; color: white; padding: 6px;">
+                                📜 History
+                            </button>
+                            <button class="btn btn-sm" onclick="deleteCard('${card.cardId}', '${card.user?.username || 'Unlinked'}')" style="background: #c0392b; color: white; padding: 6px; grid-column: span 2;">
+                                🗑️ Delete Card
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Modal untuk register kartu baru
+        function showRegisterCardModal() {
+            const cardId = prompt('🎴 Masukkan Card ID (UID dari NTag215):\n\nContoh: 04E1A3B2C5D6E7');
+            if (!cardId) return;
+
+            // Validasi format UID (14-20 hex characters)
+            if (!/^[0-9A-Fa-f]{14,20}$/.test(cardId)) {
+                alert('❌ Format Card ID tidak valid!\n\nCard ID harus:\n- 14-20 karakter\n- Hanya angka dan huruf A-F\n\nContoh: 04E1A3B2C5D6E7');
+                return;
+            }
+
+            const initialBalance = prompt('💰 Balance awal (Rp):', '0');
+            if (initialBalance === null) return;
+
+            const balance = parseFloat(initialBalance);
+            if (isNaN(balance) || balance < 0) {
+                alert('❌ Balance tidak valid! Harus angka positif.');
+                return;
+            }
+
+            // Kirim request register card
+            fetch('/api/nfc-cards/register', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-app-key': 'NFC2025SecureApp',
+                    'user-agent': 'okhttp/4.9.0'
+                },
+                body: JSON.stringify({ 
+                    cardId: cardId.toUpperCase(), 
+                    balance 
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    logActivity('action', `✅ Registered new NFC card: ${cardId}`, '#27ae60');
+                    alert(`✅ Kartu berhasil didaftarkan!\n\nCard ID: ${cardId}\nBalance: Rp ${balance.toLocaleString('id-ID')}`);
+                    loadNFCCards();
+                } else {
+                    logActivity('error', `Failed to register card: ${cardId}`, '#e74c3c');
+                    alert('❌ Gagal register kartu: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(err => {
+                console.error('Register card error:', err);
+                logActivity('error', `Error registering card: ${cardId}`, '#e74c3c');
+                alert('❌ Error: ' + err.message);
+            });
+        }
+
+        // Modal untuk link kartu ke user
+        function showLinkCardModal(cardId) {
+            const username = prompt(`🔗 Link kartu ${cardId.substring(0, 12)}... ke user:\n\nMasukkan username:`);
+            if (!username) return;
+
+            fetch('/api/nfc-cards/link', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-app-key': 'NFC2025SecureApp',
+                    'user-agent': 'okhttp/4.9.0'
+                },
+                body: JSON.stringify({ cardId, username })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    logActivity('action', `✅ Linked card ${cardId} to user ${username}`, '#3498db');
+                    alert(`✅ Kartu berhasil dilink!\n\nCard: ${cardId}\nUser: ${username}`);
+                    loadNFCCards();
+                } else {
+                    logActivity('error', `Failed to link card: ${data.error}`, '#e74c3c');
+                    alert('❌ Gagal link kartu: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(err => {
+                console.error('Link card error:', err);
+                alert('❌ Error: ' + err.message);
+            });
+        }
+
+        // Modal untuk unlink kartu dari user
+        function showUnlinkCardModal(cardId) {
+            if (!confirm(`⚠️ Unlink kartu ${cardId.substring(0, 12)}... dari user?\n\nKartu akan tetap aktif tapi tidak terhubung ke user manapun.`)) {
+                return;
+            }
+
+            fetch('/api/nfc-cards/link', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-app-key': 'NFC2025SecureApp',
+                    'user-agent': 'okhttp/4.9.0'
+                },
+                body: JSON.stringify({ cardId, userId: null })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    logActivity('action', `✅ Unlinked card ${cardId}`, '#95a5a6');
+                    alert(`✅ Kartu berhasil di-unlink!`);
+                    loadNFCCards();
+                } else {
+                    logActivity('error', `Failed to unlink card: ${data.error}`, '#e74c3c');
+                    alert('❌ Gagal unlink kartu: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(err => {
+                console.error('Unlink card error:', err);
+                alert('❌ Error: ' + err.message);
+            });
+        }
+
+        // Modal untuk top-up kartu
+        function showTopupCardModal(cardId, currentBalance) {
+            const amount = prompt(`💰 Top-up kartu ${cardId.substring(0, 12)}...\n\nBalance saat ini: Rp ${currentBalance.toLocaleString('id-ID')}\n\nJumlah top-up (Rp):`);
+            if (!amount) return;
+
+            const topupAmount = parseFloat(amount);
+            if (isNaN(topupAmount) || topupAmount <= 0) {
+                alert('❌ Jumlah tidak valid! Harus angka positif.');
+                return;
+            }
+
+            const password = prompt('🔒 Masukkan password admin:');
+            if (!password) return;
+
+            fetch('/api/nfc-cards/topup', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-app-key': 'NFC2025SecureApp',
+                    'user-agent': 'okhttp/4.9.0'
+                },
+                body: JSON.stringify({ 
+                    cardId, 
+                    amount: topupAmount,
+                    adminPassword: password 
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    logActivity('action', `✅ Top-up card ${cardId}: Rp ${topupAmount.toLocaleString('id-ID')}`, '#27ae60');
+                    alert(`✅ Top-up berhasil!\n\nCard: ${cardId}\nJumlah: Rp ${topupAmount.toLocaleString('id-ID')}\nBalance baru: Rp ${data.newBalance.toLocaleString('id-ID')}`);
+                    loadNFCCards();
+                } else {
+                    logActivity('error', `Failed to top-up card: ${data.error}`, '#e74c3c');
+                    alert('❌ Gagal top-up: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(err => {
+                console.error('Top-up card error:', err);
+                alert('❌ Error: ' + err.message);
+            });
+        }
+
+        // Block kartu
+        function blockCard(cardId) {
+            const reason = prompt(`🚫 Block kartu ${cardId.substring(0, 12)}...\n\nAlasan (opsional):`);
+            
+            fetch('/api/nfc-cards/status', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-app-key': 'NFC2025SecureApp',
+                    'user-agent': 'okhttp/4.9.0'
+                },
+                body: JSON.stringify({ 
+                    cardId, 
+                    status: 'BLOCKED',
+                    reason: reason || 'Blocked by admin'
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    logActivity('action', `🚫 Blocked card ${cardId}`, '#e74c3c');
+                    alert(`✅ Kartu berhasil diblokir!`);
+                    loadNFCCards();
+                } else {
+                    alert('❌ Gagal block kartu: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(err => {
+                console.error('Block card error:', err);
+                alert('❌ Error: ' + err.message);
+            });
+        }
+
+        // Unblock kartu
+        function unblockCard(cardId) {
+            if (!confirm(`✅ Unblock kartu ${cardId.substring(0, 12)}...?\n\nKartu akan aktif kembali dan bisa digunakan untuk transaksi.`)) {
+                return;
+            }
+
+            fetch('/api/nfc-cards/status', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-app-key': 'NFC2025SecureApp',
+                    'user-agent': 'okhttp/4.9.0'
+                },
+                body: JSON.stringify({ 
+                    cardId, 
+                    status: 'ACTIVE'
+                })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    logActivity('action', `✅ Unblocked card ${cardId}`, '#27ae60');
+                    alert(`✅ Kartu berhasil di-unblock!`);
+                    loadNFCCards();
+                } else {
+                    alert('❌ Gagal unblock kartu: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(err => {
+                console.error('Unblock card error:', err);
+                alert('❌ Error: ' + err.message);
+            });
+        }
+
+        // Delete NFC card (Admin only)
+        function deleteCard(cardId, username) {
+            const cardDisplay = cardId.substring(0, 12);
+            const userInfo = username !== 'Unlinked' ? `\nUser: ${username}` : '\nStatus: Unlinked';
+            
+            if (!confirm(`🗑️ HAPUS KARTU NFC?\n\nCard ID: ${cardDisplay}...${userInfo}\n\n⚠️ PERINGATAN:\n- Kartu akan dihapus PERMANEN dari sistem\n- Semua history transaksi akan DIHAPUS\n- User tidak bisa menggunakan kartu ini lagi\n- Aksi ini TIDAK BISA dibatalkan!\n\nYakin ingin menghapus?`)) {
+                return;
+            }
+
+            const adminPassword = prompt('🔐 Masukkan password admin untuk konfirmasi:\n\n(Password: admin123)');
+            if (!adminPassword) {
+                alert('❌ Password admin diperlukan untuk menghapus kartu');
+                return;
+            }
+
+            if (adminPassword !== 'admin123') {
+                alert('❌ Password admin salah!');
+                return;
+            }
+
+            fetch(`/api/nfc-cards/${cardId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-app-key': 'NFC2025SecureApp',
+                    'user-agent': 'okhttp/4.9.0'
+                },
+                body: JSON.stringify({ adminPassword })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    logActivity('action', `🗑️ Deleted card ${cardId} (${username})`, '#c0392b');
+                    alert(`✅ Kartu berhasil dihapus!\n\nCard ID: ${cardDisplay}...\n${userInfo}\n\nSemua data dan transaksi telah dihapus dari sistem.`);
+                    loadNFCCards();
+                } else {
+                    logActivity('error', `Failed to delete card: ${cardId}`, '#e74c3c');
+                    alert('❌ Gagal menghapus kartu: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(err => {
+                console.error('Delete card error:', err);
+                logActivity('error', `Error deleting card: ${cardId}`, '#e74c3c');
+                alert('❌ Error: ' + err.message);
+            });
+        }
+
+        // Show card transaction history
+        async function showCardHistory(cardId) {
+            try {
+                const response = await fetch(`/api/nfc-cards/transactions/${cardId}`, {
+                    headers: {
+                        'x-app-key': 'NFC2025SecureApp',
+                        'user-agent': 'okhttp/4.9.0'
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    const transactions = data.transactions || [];
+                    
+                    if (transactions.length === 0) {
+                        alert(`📜 History Kartu ${cardId.substring(0, 12)}...\n\nBelum ada transaksi.`);
+                        return;
+                    }
+
+                    let historyText = `📜 History Kartu ${cardId.substring(0, 12)}...\n\n`;
+                    historyText += `Total transaksi: ${transactions.length}\n\n`;
+                    
+                    transactions.slice(0, 10).forEach((tx, index) => {
+                        const date = new Date(tx.timestamp).toLocaleString('id-ID');
+                        historyText += `${index + 1}. ${tx.transactionType}\n`;
+                        historyText += `   Amount: Rp ${tx.amount.toLocaleString('id-ID')}\n`;
+                        historyText += `   Balance: Rp ${tx.balanceAfter.toLocaleString('id-ID')}\n`;
+                        historyText += `   ${date}\n\n`;
+                    });
+
+                    if (transactions.length > 10) {
+                        historyText += `... dan ${transactions.length - 10} transaksi lainnya`;
+                    }
+
+                    alert(historyText);
+                } else {
+                    alert('❌ Gagal load history transaksi');
+                }
+            } catch (err) {
+                console.error('Load card history error:', err);
+                alert('❌ Error: ' + err.message);
+            }
         }
 
         // Fungsi untuk add transaksi manual (belum dibuat)
@@ -1700,10 +2237,13 @@
         };
 
         // Initial load
+        console.log('🚀 Starting initial data load...');
         loadDevices();
         loadFraudAlerts();
         loadAllTransactions();
         loadAllUsers(); // Load users saat startup
+        console.log('🎴 Loading NFC cards...');
+        loadNFCCards(); // Load NFC cards saat startup
         
         // ==================== INIT AUTO REFRESH ====================
         // Aktivkan auto refresh by default untuk monitoring real-time

@@ -23,6 +23,7 @@ model User {
   receivedTransactions Transaction[] @relation("ReceiverTransactions")
   fraudAlerts          FraudAlert[]
   userSessions         UserSession[]
+  nfcCards             NFCCard[]
 
   @@map("users")
 }
@@ -134,4 +135,55 @@ model SystemSettings {
   type  String @default("string") // string, number, boolean, json
 
   @@map("system_settings")
+}
+
+model NFCCard {
+  id           Int      @id @default(autoincrement())
+  cardId       String   @unique // UID dari NTag215
+  cardType     String   @default("NTag215") // NTag215, Mifare, etc
+  frequency    String   @default("13.56MHz")
+  userId       Int?     // Link ke user (null jika belum teregistrasi)
+  cardStatus   String   @default("ACTIVE") // ACTIVE, BLOCKED, LOST, EXPIRED
+  balance      Float    @default(0)
+  lastUsed     DateTime?
+  registeredAt DateTime @default(now())
+  expiresAt    DateTime?
+  isPhysical   Boolean  @default(true) // Physical card vs virtual
+  cardData     String? // Encrypted data dari chip
+  metadata     String? // JSON: manufacturer, batch, etc
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  user         User?    @relation(fields: [userId], references: [id])
+  transactions NFCTransaction[]
+
+  @@map("nfc_cards")
+  @@index([cardId])
+  @@index([userId])
+  @@index([cardStatus])
+}
+
+model NFCTransaction {
+  id              Int      @id @default(autoincrement())
+  cardId          String
+  transactionType String   // TAP_IN, TAP_OUT, PAYMENT, TOP_UP
+  amount          Float?
+  balanceBefore   Float
+  balanceAfter    Float
+  deviceId        String
+  location        String?
+  ipAddress       String?
+  status          String   @default("SUCCESS") // SUCCESS, FAILED, PENDING
+  errorMessage    String?
+  fraudScore      Float?
+  metadata        String? // JSON: signal strength, read time, etc
+  createdAt       DateTime @default(now())
+
+  // Relations
+  card            NFCCard  @relation(fields: [cardId], references: [cardId])
+
+  @@map("nfc_transactions")
+  @@index([cardId])
+  @@index([createdAt])
 }

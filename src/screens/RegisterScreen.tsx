@@ -14,8 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import CustomButton from '../components/CustomButton';
 import { registerUser } from '../utils/database';
-import { callAPI } from '../utils/simpleBackend';
-import { API_URL } from '@/utils/configuration';
+import { apiService } from '../utils/apiService';
 
 interface RegisterScreenProps {
   onRegisterSuccess: () => void;
@@ -55,29 +54,41 @@ export default function RegisterScreen({ onRegisterSuccess, onNavigateToLogin }:
     try {
       console.log('📝 Attempting registration for:', username);
       
-      // 🌐 Coba ke backend online
+      // 🌐 Coba ke backend online menggunakan apiService
       try {
-        const response = await fetch(`${API_URL}/api/auth/register`, {
-          method: 'POST',
-          headers : { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, username, password }),
-        });
+        const response = await apiService.register({ name, username, password });
 
-        const responseData = await response.json();
+        if (response?.user) {
+          console.log('✅ Registration success (backend):', response.user.username);
 
-        if (responseData?.user) {
-          console.log('✅ Registration success (backend):', responseData.user.username);
-
-          if (responseData.token) await AsyncStorage.setItem('token', responseData.token);
-          if (responseData.user?.id) await AsyncStorage.setItem('userId', responseData.user.id.toString());
+          if (response.token) await AsyncStorage.setItem('token', response.token);
+          if (response.user?.id) await AsyncStorage.setItem('userId', response.user.id.toString());
 
           Alert.alert('Berhasil', 'Akun berhasil dibuat! Silakan login.', [
             { text: 'OK', onPress: onRegisterSuccess },
           ]);
           return;
+        } else if (response?.message) {
+          Alert.alert('Error', response.message);
+          return;
         }
       } catch (err) {
-        console.log('⚠️ Backend unavailable, using offline mode');
+        console.log('⚠️ Backend unavailable, using offline mode:', err);
+      }
+
+      // Fallback ke local registration jika backend gagal
+      try {
+        const newUser = await registerUser(name, username, password);
+        if (newUser) {
+          console.log('✅ Registration success (local):', newUser.username);
+          Alert.alert('Berhasil', 'Akun berhasil dibuat! Silakan login.', [
+            { text: 'OK', onPress: onRegisterSuccess },
+          ]);
+          return;
+        }
+      } catch (localErr) {
+        console.error('❌ Local registration failed:', localErr);
+        Alert.alert('Error', 'Username sudah digunakan atau terjadi kesalahan');
       }
 
     } catch (error) {

@@ -19,13 +19,14 @@ import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import DashboardScreen from './src/screens/DashboardScreen';
 import NFCScreen from './src/screens/NFCScreen';
+import RegisterCardScreen from './src/screens/RegisterCardScreen';
+import MyCardsScreen from './src/screens/MyCardsScreen';
 
 // ==================== Utils ====================
 import { getUserById, initDatabase } from './src/utils/database';
-import { connectBackend } from './src/utils/simpleBackend';
 import { NFCService } from './src/utils/nfc';
 import { apiService } from './src/utils/apiService';
-// Removed - now using apiService
+// Unified API service for all backend communication
 
 // ==================== Navigation Types ====================
 export type RootStackParamList = {
@@ -33,6 +34,8 @@ export type RootStackParamList = {
   Register: undefined;
   Dashboard: undefined;
   NFC: undefined;
+  RegisterCard: undefined;
+  MyCards: undefined;
 };
 
 export type NavigationProp = StackNavigationProp<RootStackParamList>;
@@ -40,7 +43,7 @@ const Stack = createStackNavigator<RootStackParamList>();
 
 // ==================== Types ====================
 type AuthState = 'loading' | 'signedIn' | 'signedOut';
-type AppScreen = 'login' | 'register' | 'dashboard' | 'nfc';
+type AppScreen = 'login' | 'register' | 'dashboard' | 'nfc' | 'registerCard' | 'myCards';
 
 interface AppUser {
   id: number;
@@ -89,9 +92,9 @@ export default function App() {
           (await AsyncStorage.getItem('deviceId')) || `device_${Date.now()}`;
         const deviceInfo = {
           deviceId,
+          deviceName: `${Platform.OS}_device_${deviceId.slice(-6)}`,
           platform: Platform.OS,
           appVersion: '1.0.0',
-          timestamp: new Date().toISOString(),
         };
 
         const userData = currentUser
@@ -134,8 +137,8 @@ export default function App() {
       // === 3️⃣ Connect to Backend (Health check)
       console.log('3️⃣ Koneksi ke backend server...');
       const connected = await Promise.race([
-        connectBackend(),
-        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 10000))
+        apiService.getConnectionStatus().connected,
+        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5000))
       ]);
       
       if (!connected) {
@@ -154,9 +157,9 @@ export default function App() {
 
         const deviceInfo = {
           deviceId,
+          deviceName: `${Platform.OS}_device_${deviceId.slice(-6)}`,
           platform: Platform.OS,
           appVersion: '1.0.0',
-          timestamp: new Date().toISOString(),
         };
 
         // Start API service monitoring
@@ -263,20 +266,28 @@ export default function App() {
   // Navigation Shortcuts
   // ========================================================
   const navigateToScreen = useCallback((screen: AppScreen) => {
-    if (!navigationRef.current) return;
+    if (!navigationRef.current) {
+      console.error('❌ Navigation ref not available');
+      return;
+    }
     try {
-      navigationRef.current.navigate(
-        screen === 'register'
+      const targetScreen = screen === 'register'
           ? 'Register'
           : screen === 'dashboard'
           ? 'Dashboard'
           : screen === 'nfc'
           ? 'NFC'
-          : 'Login'
-      );
-      console.log(`✅ Navigasi ke: ${screen}`);
+          : screen === 'registerCard'
+          ? 'RegisterCard'
+          : screen === 'myCards'
+          ? 'MyCards'
+          : 'Login';
+      
+      console.log(`🧭 Navigating from current to: ${targetScreen} (screen param: ${screen})`);
+      navigationRef.current.navigate(targetScreen);
+      console.log(`✅ Navigation completed: ${screen}`);
     } catch (err) {
-      console.error('Navigation error:', err);
+      console.error('❌ Navigation error:', err);
     }
   }, []);
 
@@ -358,6 +369,8 @@ export default function App() {
                 user={currentUser}
                 onLogout={handleLogout}
                 onNavigateToNFC={() => navigateToScreen('nfc')}
+                onNavigateToRegisterCard={() => navigateToScreen('registerCard')}
+                onNavigateToMyCards={() => navigateToScreen('myCards')}
               />
             )}
           </Stack.Screen>
@@ -367,6 +380,26 @@ export default function App() {
               <NFCScreen
                 user={currentUser}
                 onBack={() => navigateToScreen('dashboard')}
+              />
+            )}
+          </Stack.Screen>
+
+          <Stack.Screen name="RegisterCard" options={{ headerShown: false }}>
+            {() => (
+              <RegisterCardScreen
+                user={currentUser}
+                onBack={() => navigateToScreen('dashboard')}
+                onSuccess={() => navigateToScreen('myCards')}
+              />
+            )}
+          </Stack.Screen>
+
+          <Stack.Screen name="MyCards" options={{ headerShown: false }}>
+            {() => (
+              <MyCardsScreen
+                user={currentUser}
+                onBack={() => navigateToScreen('dashboard')}
+                onRegisterNew={() => navigateToScreen('registerCard')}
               />
             )}
           </Stack.Screen>
