@@ -24,11 +24,20 @@ export const usePayment = () => {
 
     try {
       // Step 1: Scan SENDER card (kartu user yang login)
-      Alert.alert(
-        '📱 Step 1/2: Scan Kartu Anda',
-        'Tempelkan kartu NFC ANDA ke belakang HP',
-        [{ text: 'Siap', onPress: () => {} }]
-      );
+      await new Promise<void>((resolve, reject) => {
+        Alert.alert(
+          '📱 Step 1/2: Scan Kartu Anda',
+          'Tempelkan kartu NFC ANDA ke belakang HP',
+          [
+            { 
+              text: 'Batal', 
+              style: 'cancel',
+              onPress: () => reject(new Error('USER_CANCELLED'))
+            },
+            { text: 'Siap', onPress: () => resolve() }
+          ]
+        );
+      });
 
       const senderCard = await NFCService.readPhysicalCard();
       
@@ -91,11 +100,20 @@ export const usePayment = () => {
       // Step 2: Scan RECEIVER card
       await new Promise(resolve => setTimeout(resolve, 1000)); // Delay 1s
 
-      Alert.alert(
-        '📱 Step 2/2: Scan Kartu Penerima',
-        'Tempelkan kartu NFC TEMAN ke belakang HP',
-        [{ text: 'Siap', onPress: () => {} }]
-      );
+      await new Promise<void>((resolve, reject) => {
+        Alert.alert(
+          '📱 Step 2/2: Scan Kartu Penerima',
+          'Tempelkan kartu NFC TEMAN ke belakang HP',
+          [
+            { 
+              text: 'Batal', 
+              style: 'cancel',
+              onPress: () => reject(new Error('USER_CANCELLED'))
+            },
+            { text: 'Siap', onPress: () => resolve() }
+          ]
+        );
+      });
 
       const receiverCard = await NFCService.readPhysicalCard();
       
@@ -163,14 +181,14 @@ export const usePayment = () => {
           );
         } else if (fraudScore > 40) {
           Alert.alert(
-            '✅ Transaksi Berhasil (Review)',
-            `Transfer Rp ${amount.toLocaleString('id-ID')} berhasil!\n\nPenerima: ${receiverCheck.card.userName}\n\n⚠️ Akan direview sistem (Fraud Score: ${fraudScore}%).`,
+            '✅ Transfer Berhasil (Review)',
+            `✅ Uang Rp ${amount.toLocaleString('id-ID')} SUDAH DITERIMA oleh:\n📱 ${receiverCheck.card.userName}\n\n⚠️ Transaksi akan direview sistem (Fraud Score: ${fraudScore}%).\n\n💰 Saldo Anda: Rp ${paymentResult.transaction?.senderBalance?.toLocaleString('id-ID')}`,
             [{ text: 'OK' }]
           );
         } else {
           Alert.alert(
-            '✅ Transaksi Berhasil',
-            `Transfer Rp ${amount.toLocaleString('id-ID')} berhasil!\n\nPenerima: ${receiverCheck.card.userName}\nBalance: Rp ${paymentResult.transaction?.balanceAfter.toLocaleString('id-ID')}`,
+            '✅ Transfer Berhasil! 🎉',
+            `✅ Uang Rp ${amount.toLocaleString('id-ID')} SUDAH DITERIMA oleh:\n📱 ${receiverCheck.card.userName}\n\n💰 Saldo Anda: Rp ${paymentResult.transaction?.senderBalance?.toLocaleString('id-ID')}\n� Saldo Penerima: Rp ${paymentResult.transaction?.receiverBalance?.toLocaleString('id-ID')}`,
             [{ text: 'OK' }]
           );
         }
@@ -185,6 +203,13 @@ export const usePayment = () => {
 
     } catch (error: any) {
       console.error('Payment error:', error);
+      
+      // Handle user cancellation
+      if (error?.message === 'USER_CANCELLED') {
+        Alert.alert('🚫 Transfer Dibatalkan', 'Transfer telah dibatalkan.', [{ text: 'OK' }]);
+        setIsProcessing(false);
+        return false;
+      }
       
       // Handle rate limit error gracefully
       if (error?.message?.includes('429')) {

@@ -440,6 +440,11 @@ router.post('/payment', async (req, res) => {
       let updatedReceiverUser = null;
 
       if (receiverCard) {
+        // Validate receiver has userId
+        if (!receiverCard.userId) {
+          throw new Error('Receiver card not linked to any user');
+        }
+        
         // Update receiver USER balance
         updatedReceiverUser = await tx.user.update({
           where: { id: receiverCard.userId },
@@ -528,7 +533,15 @@ router.post('/payment', async (req, res) => {
       return { updatedSenderCard, updatedSenderUser, updatedReceiverCard, updatedReceiverUser };
     });
 
-    console.log(`💳 NFC Payment: ${cardId.slice(0, 8)}... → ${receiverCardId?.slice(0, 8) || `user:${receiverId}`} (${formatCurrency(amountNum)})`);
+    const senderUsername = senderCard.user?.username || 'Unknown';
+    const receiverUsername = receiverCard?.user?.username || 'Unknown';
+    
+    console.log(`✅ Transfer Success!`);
+    console.log(`   Pengirim: ${senderUsername} (${cardId.slice(0, 8)}...)`);
+    console.log(`   Penerima: ${receiverUsername} (${receiverCardId?.slice(0, 8) || 'user'}...)`);
+    console.log(`   💸 Amount: ${formatCurrency(amountNum)}`);
+    console.log(`   💰 Saldo Pengirim: ${formatCurrency(result.updatedSenderUser.balance)}`);
+    console.log(`   💵 Saldo Penerima: ${formatCurrency(result.updatedReceiverUser?.balance || 0)}`);
 
     res.json({
       success: true,

@@ -26,6 +26,8 @@ export default function DashboardScreen({ user, onLogout, onNavigateToNFC, onNav
   // State koneksi backend: backendStatus (teks), connectionStatus (connecting/connected/offline)
   const [backendStatus, setBackendStatus] = useState('Connecting...');
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'offline'>('connecting');
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  const [syncStatus, setSyncStatus] = useState<'success' | 'failed' | 'never'>('never');
 
   // refreshData: Reload user data dan transaksi dari database + sync balance dari backend
   const refreshData = async () => {
@@ -54,9 +56,12 @@ export default function DashboardScreen({ user, onLogout, onNavigateToNFC, onNav
         if (syncedBalance !== null && typeof syncedBalance === 'number' && updatedUser) {
           updatedUser.balance = syncedBalance;
           setCurrentUser(updatedUser);
+          setLastSyncTime(new Date());
+          setSyncStatus('success');
           console.log(`✅ Updated user balance from backend: ${syncedBalance}`);
         }
       } catch (syncError: any) {
+        setSyncStatus('failed');
         // Silent fail untuk rate limit errors
         if (syncError.message?.includes('429')) {
           console.log('⏱️ Rate limited, using cached balance');
@@ -141,6 +146,18 @@ export default function DashboardScreen({ user, onLogout, onNavigateToNFC, onNav
     });
   };
 
+  // Utility: Format waktu relatif (2 menit lalu, 1 jam lalu)
+  const formatTimeSince = (date: Date) => {
+    const seconds = Math.floor((new Date().getTime() - date.getTime()) / 1000);
+    if (seconds < 60) return 'baru saja';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes} menit lalu`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours} jam lalu`;
+    const days = Math.floor(hours / 24);
+    return `${days} hari lalu`;
+  };
+
   // handleLogout: Tampilkan konfirmasi logout
   const handleLogout = () => {
     console.log('🔘 Logout button pressed');
@@ -192,7 +209,19 @@ export default function DashboardScreen({ user, onLogout, onNavigateToNFC, onNav
           </View>
           <Text style={styles.balanceAmount}>{formatCurrency(currentUser?.balance || 0)}</Text>
           <Text style={styles.balanceSubtext}>Username: {currentUser?.username || 'Loading...'}</Text>
-          <Text style={styles.syncInfo}>Pull ke bawah atau klik 🔄 untuk sync saldo</Text>
+          {lastSyncTime && syncStatus === 'success' && (
+            <Text style={styles.lastSyncSuccess}>
+              ✅ Sync berhasil • {formatTimeSince(lastSyncTime)}
+            </Text>
+          )}
+          {syncStatus === 'failed' && (
+            <Text style={styles.lastSyncFailed}>
+              ⚠️ Sync gagal • Menggunakan data cache
+            </Text>
+          )}
+          {syncStatus === 'never' && (
+            <Text style={styles.syncInfo}>Pull ke bawah atau klik 🔄 untuk sync saldo</Text>
+          )}
         </View>
 
         {/* SECTION 3: Connection Status - Backend online/offline status */}
@@ -507,6 +536,20 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontStyle: 'italic',
     textAlign: 'center',
+  },
+  lastSyncSuccess: {
+    fontSize: 11,
+    color: '#28a745',
+    marginTop: 4,
+    textAlign: 'center',
+    fontWeight: '500',
+  },
+  lastSyncFailed: {
+    fontSize: 11,
+    color: '#ffc107',
+    marginTop: 4,
+    textAlign: 'center',
+    fontWeight: '500',
   },
   reconnectButton: {
     width: 30,

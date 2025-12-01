@@ -381,8 +381,13 @@ export class NFCService {
         alertMessage: 'Dekatkan kartu NFC ke HP...'
       });
       
-      // Get tag info
-      const tag = await NfcManager.getTag();
+      // Get tag info with 30 second timeout
+      const tag = await Promise.race([
+        NfcManager.getTag(),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('NFC_TIMEOUT')), 30000)
+        )
+      ]) as any;
 
       if (!tag || !tag.id) {
         console.warn('⚠️ No NFC card detected');

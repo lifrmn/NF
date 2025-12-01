@@ -152,7 +152,7 @@ export default function NFCScreen({ user, onBack }: NFCScreenProps) {
             </>
           ) : (
             <>
-              <Text style={styles.actionButtonText}>💸 Kirim Uang</Text>
+              <Text style={styles.actionButtonText}>� Kirim Uang</Text>
               <Text style={styles.actionButtonSubtext}>
                 Tap & tempelkan ke kartu penerima
               </Text>
