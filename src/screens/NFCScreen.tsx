@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { NFCService } from '../utils/nfc';
 import { useNFCScanner } from '../hooks/useNFCScanner';
 import { usePayment } from '../hooks/usePayment';
+import { apiService } from '../utils/apiService';
 
 interface NFCScreenProps {
   user: any;
@@ -22,6 +23,7 @@ interface NFCScreenProps {
 export default function NFCScreen({ user, onBack }: NFCScreenProps) {
   const [nfcEnabled, setNfcEnabled] = useState(false);
   const [amount, setAmount] = useState('');
+  const [currentBalance, setCurrentBalance] = useState(user?.balance || 0);
   
   const { isProcessing, processTapToPayTransfer } = usePayment();
 
@@ -37,6 +39,25 @@ export default function NFCScreen({ user, onBack }: NFCScreenProps) {
     if (supported) {
       const enabled = await NFCService.checkNFCEnabled();
       setNfcEnabled(enabled);
+    }
+  };
+
+  const fetchBalance = async () => {
+    try {
+      const response = await apiService.getUserById(user.id);
+      if (response && response.user && typeof response.user.balance === 'number') {
+        setCurrentBalance(response.user.balance);
+        console.log('✅ Balance refreshed:', response.user.balance);
+      } else if (typeof response === 'object' && typeof response.balance === 'number') {
+        // Fallback if response is user object directly
+        setCurrentBalance(response.balance);
+        console.log('✅ Balance refreshed (fallback):', response.balance);
+      } else {
+        console.warn('⚠️ Balance refresh: unexpected response structure', response);
+      }
+    } catch (error: any) {
+      console.error('❌ Failed to refresh balance:', error?.message || error);
+      // Don't show alert, just log - balance will refresh on next screen focus
     }
   };
 
@@ -58,7 +79,7 @@ export default function NFCScreen({ user, onBack }: NFCScreenProps) {
     }
 
     // Langsung transfer dengan tap kartu sender ke receiver
-    const success = await processTapToPayTransfer(user.id, amountNum);
+    const success = await processTapToPayTransfer(user.id, amountNum, fetchBalance);
     
     if (success) {
       setAmount('');
@@ -105,25 +126,25 @@ export default function NFCScreen({ user, onBack }: NFCScreenProps) {
         <View style={styles.userCard}>
           <Text style={styles.userName}>👤 {user?.name}</Text>
           <Text style={styles.userBalance}>
-            Balance: Rp {user?.balance?.toLocaleString('id-ID') || '0'}
+            Balance: Rp {currentBalance?.toLocaleString('id-ID') || '0'}
           </Text>
         </View>
 
         {/* Info Card */}
         <View style={styles.instructionCard}>
-          <Text style={styles.instructionTitle}>📖 Cara Transfer NFC:</Text>
+          <Text style={styles.instructionTitle}>📖 Cara Terima Pembayaran:</Text>
           <Text style={styles.instructionText}>
-            1. Masukkan jumlah transfer{'\n'}
-            2. Tekan tombol "Kirim Uang"{'\n'}
-            3. Tempelkan kartu NFC Anda ke HP{'\n'}
-            4. Tempelkan kartu NFC teman ke HP{'\n'}
-            5. Saldo teman otomatis bertambah! ✅
+            1. Masukkan jumlah pembayaran{'\n'}
+            2. Tekan tombol "Terima Pembayaran"{'\n'}
+            3. Pembeli tempelkan kartu NFC ke HP Anda{'\n'}
+            4. Saldo Anda otomatis bertambah! ✅{'\n'}
+            5. Saldo pembeli otomatis berkurang! ✅
           </Text>
         </View>
 
         {/* Amount Input */}
         <View style={styles.inputCard}>
-          <Text style={styles.inputLabel}>💰 Jumlah Transfer:</Text>
+          <Text style={styles.inputLabel}>💰 Jumlah Pembayaran:</Text>
           <TextInput
             style={styles.input}
             placeholder="Contoh: 50000"
@@ -266,6 +287,7 @@ const styles = StyleSheet.create({
   },
   scanCardButton: { backgroundColor: '#9b59b6' },
   sendButton: { backgroundColor: '#27ae60' },
+  receiveButton: { backgroundColor: '#2196f3' },
   disabledButton: { backgroundColor: '#95a5a6', opacity: 0.6 },
   actionButtonText: { color: 'white', fontSize: 18, fontWeight: 'bold', marginBottom: 4 },
   actionButtonSubtext: { color: 'rgba(255, 255, 255, 0.9)', fontSize: 14 },

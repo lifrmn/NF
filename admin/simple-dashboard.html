@@ -2190,7 +2190,7 @@
                 })
                 .then(res => res.json())
                 .then(data => {
-                    if (data.success) {
+                    if (data.success || data.message) {
                         logActivity('action', `✅ Deleted user: ${username}`, '#e74c3c');
                         alert('✅ User berhasil dihapus!');
                         refreshAllData();

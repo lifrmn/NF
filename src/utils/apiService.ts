@@ -160,7 +160,8 @@ export class APIService {
   // ========================= USER METHODS =========================
 
   async getUserById(id: number) {
-    const response = await this.makeRequest(`/api/users/${id}`);
+    // Use public endpoint (no auth required) for mobile app
+    const response = await this.makeRequest(`/api/users/${id}/public`);
     // Backend response: { success: true, user: {...} }
     return response?.user || response;
   }

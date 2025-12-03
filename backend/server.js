@@ -280,6 +280,46 @@ app.put('/api/users/:id', async (req, res) => {
   }
 });
 
+// Get user by ID (PUBLIC - NO AUTH) - untuk Mobile App sync balance
+app.get('/api/users/:id/public', async (req, res) => {
+  try {
+    const userId = parseInt(req.params.id);
+    
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID required' });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        balance: true,
+        isActive: true,
+        deviceId: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    console.log(`📱 Public user fetch: ${user.username} (balance: ${user.balance})`);
+
+    res.json({
+      success: true,
+      user: user
+    });
+
+  } catch (error) {
+    console.error('Get user public error:', error);
+    res.status(500).json({ error: 'Failed to get user' });
+  }
+});
+
 // Delete user (DELETE /api/users/:id) - untuk User Management (NO AUTH)
 app.delete('/api/users/:id', async (req, res) => {
   try {
@@ -288,14 +328,78 @@ app.delete('/api/users/:id', async (req, res) => {
     if (!userId) {
       return res.status(400).json({ error: 'User ID required' });
     }
+
+    // Check if user exists
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        username: true
+      }
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User tidak ditemukan' });
+    }
+
+    // CASCADE DELETE: Delete related records first to avoid foreign key constraint
     
-    // Delete user from database
-    const deletedUser = await prisma.user.delete({
+    // 1. Delete user's NFC cards
+    await prisma.nFCCard.deleteMany({
+      where: { userId: userId }
+    });
+
+    // 2. Delete user's transactions (both sent and received)
+    await prisma.transaction.deleteMany({
+      where: {
+        OR: [
+          { senderId: userId },
+          { receiverId: userId }
+        ]
+      }
+    });
+
+    // 3. Delete user's fraud alerts
+    await prisma.fraudAlert.deleteMany({
+      where: { userId: userId }
+    });
+
+    // 4. Delete user's sessions
+    await prisma.userSession.deleteMany({
+      where: { userId: userId }
+    });
+
+    // 5. Delete the user
+    await prisma.user.delete({
       where: { id: userId }
     });
+
+    // 4. Log admin action
+    await prisma.adminLog.create({
+      data: {
+        action: 'USER_DELETE',
+        details: JSON.stringify({
+          userId: user.id,
+          username: user.username,
+          name: user.name
+        }),
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent']
+      }
+    });
     
-    console.log(`🗑️ Deleted user ${userId}: ${deletedUser.username}`);
-    res.json({ success: true, message: 'User deleted successfully' });
+    console.log(`🗑️ User ${user.username} (ID: ${user.id}) berhasil dihapus (cascade: cards + transactions)`);
+    
+    res.json({
+      success: true,
+      message: 'User berhasil dihapus',
+      user: {
+        id: user.id,
+        name: user.name,
+        username: user.username
+      }
+    });
     
   } catch (error) {
     if (error.code === 'P2025') {

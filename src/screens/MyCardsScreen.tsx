@@ -295,7 +295,7 @@ export default function MyCardsScreen({ user, onBack, onRegisterNew }: MyCardsSc
               <View style={styles.cardBody}>
                 <View style={styles.cardInfo}>
                   <Text style={styles.cardInfoLabel}>💰 Saldo:</Text>
-                  <Text style={[styles.cardInfoValue, styles.balanceValue]}>{formatCurrency(card.balance)}</Text>
+                  <Text style={[styles.cardInfoValue, styles.balanceValue]}>{formatCurrency(user?.balance || 0)}</Text>
                 </View>
                 
                 <View style={styles.cardDivider} />

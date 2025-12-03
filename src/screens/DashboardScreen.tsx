@@ -4,6 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getUserById, getUserTransactions, syncBalanceFromBackend } from '../utils/database';
 import { apiService } from '../utils/apiService';
@@ -124,6 +125,14 @@ export default function DashboardScreen({ user, onLogout, onNavigateToNFC, onNav
       clearInterval(statusInterval);
     };
   }, []);
+
+  // useFocusEffect: Auto-refresh saldo setiap kali screen aktif (kembali dari NFCScreen)
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('📱 Dashboard focused - refreshing balance...');
+      refreshData();
+    }, [user])
+  );
 
   // Utility: Format angka ke Rupiah (100000 → Rp100.000)
   const formatCurrency = (amount: number) => {

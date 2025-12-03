@@ -60,17 +60,39 @@ function makeHttpRequest(options) {
       });
       
       response.on('end', () => {
+        // Check if response is HTML (ngrok error page)
+        if (data.trim().startsWith('<') || data.includes('<!DOCTYPE')) {
+          console.error('❌ Received HTML instead of JSON (ngrok might be down or URL changed)');
+          reject(new Error('Backend returned HTML instead of JSON. Check if ngrok is running and URL is correct.'));
+          return;
+        }
+
+        // Check if response is empty
+        if (!data || data.trim().length === 0) {
+          console.error('❌ Received empty response from backend');
+          reject(new Error('Backend returned empty response'));
+          return;
+        }
+
         try {
           const jsonData = JSON.parse(data);
           resolve(jsonData);
         } catch (parseError) {
-          reject(parseError);
+          console.error('❌ JSON parse error:', parseError.message);
+          console.error('❌ Response data preview:', data.substring(0, 200));
+          reject(new Error(`Invalid JSON response: ${parseError.message}`));
         }
       });
     });
 
     req.on('error', (error) => {
+      console.error('❌ HTTP request error:', error.message);
       reject(error);
+    });
+
+    req.setTimeout(10000, () => {
+      req.destroy();
+      reject(new Error('Request timeout after 10 seconds'));
     });
 
     if (options.body) {
@@ -938,6 +960,9 @@ class SimpleNFCAdmin {
       if (!userId) {
         return res.status(400).json({ error: 'User ID required' });
       }
+
+      // Parse backend URL
+      const backendConfig = parseBackendUrl();
 
       // Kirim delete ke backend
       try {

@@ -136,16 +136,17 @@ export default function App() {
 
       // === 3️⃣ Connect to Backend (Health check)
       console.log('3️⃣ Koneksi ke backend server...');
-      const connected = await Promise.race([
-        apiService.getConnectionStatus().connected,
-        new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5000))
-      ]);
-      
-      if (!connected) {
+      let connected = false;
+      try {
+        await Promise.race([
+          apiService.healthCheck(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 5000))
+        ]);
+        connected = true;
+        console.log('✅ Backend connected');
+      } catch (err) {
         console.warn('⚠️ Backend tidak terhubung, mode offline');
         // Jangan throw error, lanjutkan ke auth check
-      } else {
-        console.log('✅ Backend connected');
       }
 
       // === 4️⃣ Register Device ke Admin System (optional)
@@ -162,8 +163,6 @@ export default function App() {
           appVersion: '1.0.0',
         };
 
-        // Start API service monitoring
-        apiService.startConnectionMonitoring();
         await Promise.race([
           apiService.registerDevice(deviceInfo),
           new Promise((_, reject) => setTimeout(() => reject(new Error('Sync timeout')), 3000))

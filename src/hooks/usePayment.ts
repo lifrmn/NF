@@ -14,20 +14,22 @@ export const usePayment = () => {
   const [isProcessing, setIsProcessing] = useState(false);
 
   // =========================================================================
-  // Tap-to-Pay Transfer: Scan sender → receiver → auto transfer
+  // Receive Payment: Penerima (Penjual) scan kartu Pembeli untuk terima bayaran
+  // Flow: Penerima (login) → Scan kartu Pembeli → Transfer otomatis
   // =========================================================================
   const processTapToPayTransfer = async (
     currentUserId: number,
-    amount: number
+    amount: number,
+    onSuccess?: () => void
   ): Promise<boolean> => {
     setIsProcessing(true);
 
     try {
-      // Step 1: Scan SENDER card (kartu user yang login)
+      // Step 1: Scan kartu PEMBELI (customer yang akan bayar)
       await new Promise<void>((resolve, reject) => {
         Alert.alert(
-          '📱 Step 1/2: Scan Kartu Anda',
-          'Tempelkan kartu NFC ANDA ke belakang HP',
+          '💳 Scan Kartu Pembeli',
+          'Tempelkan kartu NFC PEMBELI ke HP Anda untuk menerima pembayaran',
           [
             { 
               text: 'Batal', 
@@ -39,137 +41,166 @@ export const usePayment = () => {
         );
       });
 
-      const senderCard = await NFCService.readPhysicalCard();
+      const buyerCard = await NFCService.readPhysicalCard();
       
-      if (!senderCard) {
-        Alert.alert('❌ Kartu Pengirim Tidak Terbaca', 'Coba lagi.');
+      if (!buyerCard) {
+        Alert.alert('❌ Kartu Pembeli Tidak Terbaca', 'Coba lagi.');
         setIsProcessing(false);
         return false;
       }
 
-      console.log('📤 Sender card scanned:', senderCard.id);
+      console.log('💳 Buyer card scanned:', buyerCard.id);
 
-      // Validate sender card
-      const senderCheck = await apiService.get(`/api/nfc-cards/info/${senderCard.id}`);
+      // Validate buyer card
+      const buyerCheck = await apiService.get(`/api/nfc-cards/info/${buyerCard.id}`);
       
-      if (!senderCheck.success) {
+      if (!buyerCheck.success) {
         Alert.alert(
-          '📝 Kartu Belum Terdaftar',
-          'Daftarkan kartu Anda terlebih dahulu di menu "Daftar Kartu".',
+          '📝 Kartu Pembeli Belum Terdaftar',
+          'Kartu pembeli harus terdaftar di sistem terlebih dahulu.',
           [{ text: 'OK' }]
         );
         setIsProcessing(false);
         return false;
       }
 
-      if (senderCheck.card.cardStatus !== 'ACTIVE') {
+      if (buyerCheck.card.cardStatus !== 'ACTIVE') {
         Alert.alert(
-          '🚫 Kartu Tidak Aktif',
-          `Status: ${senderCheck.card.cardStatus}\n\nHubungi admin.`,
+          '🚫 Kartu Pembeli Tidak Aktif',
+          `Status: ${buyerCheck.card.cardStatus}\n\nPembeli harus mengaktifkan kartu.`,
           [{ text: 'OK' }]
         );
         setIsProcessing(false);
         return false;
       }
 
-      // Check ownership
-      if (senderCheck.card.userId !== currentUserId) {
+      // Check tidak terima bayaran dari kartu sendiri
+      if (buyerCheck.card.userId === currentUserId) {
         Alert.alert(
-          '⚠️ Kartu Ini Bukan Milik Anda',
-          'Gunakan kartu yang terdaftar atas nama Anda.',
+          '⚠️ Tidak Dapat Menerima dari Kartu Sendiri',
+          'Kartu pembeli tidak boleh sama dengan kartu Anda.',
           [{ text: 'OK' }]
         );
         setIsProcessing(false);
         return false;
       }
 
-      // Validate balance - Gunakan saldo USER, bukan saldo kartu fisik
-      const userBalance = senderCheck.card.user?.balance || 0;
-      if (userBalance < amount) {
+      // Validate balance pembeli - Gunakan saldo USER, bukan saldo kartu fisik
+      const buyerBalance = buyerCheck.card.user?.balance || 0;
+      if (buyerBalance < amount) {
         Alert.alert(
-          '💰 Saldo Tidak Cukup',
-          `Saldo Anda: Rp ${userBalance.toLocaleString('id-ID')}\nJumlah transfer: Rp ${amount.toLocaleString('id-ID')}\n\nSaldo tidak mencukupi untuk transfer.`,
+          '💰 Saldo Pembeli Tidak Cukup',
+          `Saldo Pembeli: Rp ${buyerBalance.toLocaleString('id-ID')}\nJumlah bayar: Rp ${amount.toLocaleString('id-ID')}\n\nPembeli tidak memiliki saldo yang cukup.`,
           [{ text: 'OK' }]
         );
         setIsProcessing(false);
         return false;
       }
       
-      console.log(`💰 User balance: Rp ${userBalance.toLocaleString('id-ID')}`);
+      console.log(`💰 Buyer balance: Rp ${buyerBalance.toLocaleString('id-ID')}`);
 
-      // Step 2: Scan RECEIVER card
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Delay 1s
-
-      await new Promise<void>((resolve, reject) => {
+      // Step 2: Get kartu penerima (user yang login) dari database
+      console.log('🔍 Getting receiver card info...');
+      
+      let receiverCardsResponse;
+      try {
+        // Ambil kartu aktif dari user yang login (penerima/penjual)
+        receiverCardsResponse = await apiService.get(`/api/users/${currentUserId}/cards`);
+        console.log('📥 Receiver cards response:', JSON.stringify(receiverCardsResponse));
+      } catch (error: any) {
+        console.error('❌ Failed to get receiver cards:', error);
         Alert.alert(
-          '📱 Step 2/2: Scan Kartu Penerima',
-          'Tempelkan kartu NFC TEMAN ke belakang HP',
-          [
-            { 
-              text: 'Batal', 
-              style: 'cancel',
-              onPress: () => reject(new Error('USER_CANCELLED'))
-            },
-            { text: 'Siap', onPress: () => resolve() }
-          ]
+          '❌ Error Koneksi',
+          `Gagal mengambil data kartu Anda.\n\nDetail: ${error?.message || 'Unknown error'}\n\nPastikan Anda sudah login dan koneksi internet stabil.`,
+          [{ text: 'OK' }]
         );
-      });
+        setIsProcessing(false);
+        return false;
+      }
+      
+      // Validate response structure
+      if (!receiverCardsResponse || typeof receiverCardsResponse !== 'object') {
+        console.error('❌ Invalid response structure:', receiverCardsResponse);
+        Alert.alert(
+          '❌ Error Response',
+          'Format response dari server tidak valid. Hubungi admin.',
+          [{ text: 'OK' }]
+        );
+        setIsProcessing(false);
+        return false;
+      }
+      
+      if (!receiverCardsResponse.success || !receiverCardsResponse.cards || !Array.isArray(receiverCardsResponse.cards) || receiverCardsResponse.cards.length === 0) {
+        console.log('⚠️ No cards found for user:', currentUserId);
+        Alert.alert(
+          '📝 Anda Belum Punya Kartu Terdaftar',
+          'Daftarkan kartu Anda terlebih dahulu di menu "Daftar Kartu" sebelum menerima pembayaran.',
+          [{ text: 'OK' }]
+        );
+        setIsProcessing(false);
+        return false;
+      }
 
-      const receiverCard = await NFCService.readPhysicalCard();
+      // Ambil kartu aktif pertama sebagai kartu penerima
+      const receiverCard = receiverCardsResponse.cards.find((c: any) => c.cardStatus === 'ACTIVE');
       
       if (!receiverCard) {
-        Alert.alert('❌ Kartu Penerima Tidak Terbaca', 'Coba lagi.');
-        setIsProcessing(false);
-        return false;
-      }
-
-      console.log('📥 Receiver card scanned:', receiverCard.id);
-
-      // Validate receiver card
-      const receiverCheck = await apiService.get(`/api/nfc-cards/info/${receiverCard.id}`);
-      
-      if (!receiverCheck.success) {
+        const totalCards = receiverCardsResponse.cards.length;
+        const cardStatuses = receiverCardsResponse.cards.map((c: any) => c.cardStatus).join(', ');
+        console.log(`⚠️ User has ${totalCards} cards but none are ACTIVE. Statuses: ${cardStatuses}`);
         Alert.alert(
-          '📝 Kartu Penerima Belum Terdaftar',
-          'Penerima harus mendaftar kartu terlebih dahulu.',
+          '🚫 Tidak Ada Kartu Aktif',
+          `Anda memiliki ${totalCards} kartu terdaftar, tapi tidak ada yang aktif.\n\nStatus kartu: ${cardStatuses}\n\nAktifkan kartu Anda terlebih dahulu untuk menerima pembayaran.`,
           [{ text: 'OK' }]
         );
         setIsProcessing(false);
         return false;
       }
 
-      if (receiverCheck.card.cardStatus !== 'ACTIVE') {
-        Alert.alert(
-          '🚫 Kartu Penerima Tidak Aktif',
-          `Status: ${receiverCheck.card.cardStatus}`,
-          [{ text: 'OK' }]
-        );
-        setIsProcessing(false);
-        return false;
-      }
-
-      // Check tidak transfer ke kartu sendiri
-      if (receiverCard.id === senderCard.id) {
-        Alert.alert(
-          '⚠️ Tidak Dapat Transfer ke Kartu Sendiri',
-          '',
-          [{ text: 'OK' }]
-        );
-        setIsProcessing(false);
-        return false;
-      }
+      console.log('📥 Receiver card (auto-detected):', receiverCard.cardId);
 
       // Step 3: Process payment to BACKEND
       console.log('💸 Processing payment...');
-      const paymentResult = await apiService.post('/api/nfc-cards/payment', {
-        cardId: senderCard.id,
-        receiverCardId: receiverCard.id,
+      console.log('📤 Payment data:', {
+        buyerCardId: buyerCard.id,
+        receiverCardId: receiverCard.cardId,
         amount: amount,
-        deviceId: 'unknown',
-        description: 'Tap-to-pay transfer'
+        buyerUserId: buyerCheck.card.userId,
+        receiverUserId: currentUserId
       });
+      
+      let paymentResult;
+      try {
+        paymentResult = await apiService.post('/api/nfc-cards/payment', {
+          cardId: buyerCard.id,
+          receiverCardId: receiverCard.cardId,
+          amount: amount,
+          deviceId: 'unknown',
+          description: 'Merchant payment (receive)'
+        });
+        console.log('📥 Payment result:', JSON.stringify(paymentResult));
+      } catch (paymentError: any) {
+        console.error('❌ Payment API error:', paymentError);
+        Alert.alert(
+          '❌ Pembayaran Gagal',
+          `Terjadi kesalahan saat memproses pembayaran.\n\nDetail: ${paymentError?.message || 'Unknown error'}`,
+          [{ text: 'OK' }]
+        );
+        setIsProcessing(false);
+        return false;
+      }
 
-      if (paymentResult.success) {
+      if (paymentResult && paymentResult.success) {
+        // Refresh balance setelah transaksi berhasil
+        if (onSuccess) {
+          try {
+            await onSuccess();
+          } catch (refreshError) {
+            console.error('⚠️ Balance refresh failed:', refreshError);
+            // Don't block success flow if refresh fails
+          }
+        }
+        
         // Check fraud score
         const fraudScore = paymentResult.transaction?.fraudScore || 0;
         
@@ -181,14 +212,14 @@ export const usePayment = () => {
           );
         } else if (fraudScore > 40) {
           Alert.alert(
-            '✅ Transfer Berhasil (Review)',
-            `✅ Uang Rp ${amount.toLocaleString('id-ID')} SUDAH DITERIMA oleh:\n📱 ${receiverCheck.card.userName}\n\n⚠️ Transaksi akan direview sistem (Fraud Score: ${fraudScore}%).\n\n💰 Saldo Anda: Rp ${paymentResult.transaction?.senderBalance?.toLocaleString('id-ID')}`,
+            '✅ Pembayaran Diterima (Review)',
+            `✅ Anda menerima Rp ${amount.toLocaleString('id-ID')} dari:\n💳 ${buyerCheck.card.userName}\n\n⚠️ Transaksi akan direview sistem (Fraud Score: ${fraudScore}%).\n\n💰 Saldo Anda Sekarang: Rp ${paymentResult.transaction?.receiverBalance?.toLocaleString('id-ID')}`,
             [{ text: 'OK' }]
           );
         } else {
           Alert.alert(
-            '✅ Transfer Berhasil! 🎉',
-            `✅ Uang Rp ${amount.toLocaleString('id-ID')} SUDAH DITERIMA oleh:\n📱 ${receiverCheck.card.userName}\n\n💰 Saldo Anda: Rp ${paymentResult.transaction?.senderBalance?.toLocaleString('id-ID')}\n� Saldo Penerima: Rp ${paymentResult.transaction?.receiverBalance?.toLocaleString('id-ID')}`,
+            '✅ Pembayaran Berhasil Diterima! 🎉',
+            `✅ Anda menerima Rp ${amount.toLocaleString('id-ID')} dari:\n💳 ${buyerCheck.card.userName}\n\n💰 Saldo Anda Sekarang: Rp ${paymentResult.transaction?.receiverBalance?.toLocaleString('id-ID')}\n💳 Saldo Pembeli: Rp ${paymentResult.transaction?.senderBalance?.toLocaleString('id-ID')}`,
             [{ text: 'OK' }]
           );
         }
