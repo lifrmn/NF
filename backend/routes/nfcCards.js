@@ -49,12 +49,31 @@ const analyzeFraudRisk = async (senderCard, amount, deviceId, prisma) => {
   }
 
   try {
-    // Load historical transaction data (last 100 transactions)
+    // Load historical transaction data (last 15 transactions)
     const recentTransactions = await prisma.transaction.findMany({
       where: { senderId: senderCard.userId },
-      orderBy: { timestamp: 'desc' },
-      take: 100
+      orderBy: { createdAt: 'desc' },
+      take: 15
     });
+
+    // =========================================================================
+    // SPECIAL CASE: First transaction (no history)
+    // =========================================================================
+    if (recentTransactions.length === 0) {
+      console.log('ℹ️ First transaction for user - No fraud risk');
+      return {
+        riskScore: 0,
+        decision: 'ALLOW',
+        riskLevel: 'LOW',
+        riskFactors: ['First transaction - No historical data for comparison'],
+        zScore: '0.00',
+        recentTxCount: 0,
+        avgAmount: '0',
+        stdDev: '0',
+        amountScore: 0,
+        velocityScore: 0
+      };
+    }
 
     // =========================================================================
     // FACTOR 1: Amount Anomaly Detection using Z-Score (Weight: 60%)
@@ -102,7 +121,7 @@ const analyzeFraudRisk = async (senderCard, amount, deviceId, prisma) => {
     
     const oneMinuteAgo = new Date(Date.now() - 60 * 1000);
     const recentTxCount = recentTransactions.filter(
-      t => new Date(t.timestamp) > oneMinuteAgo
+      t => new Date(t.createdAt) > oneMinuteAgo
     ).length;
 
     // Velocity scoring based on transaction frequency
@@ -190,7 +209,15 @@ const analyzeFraudRisk = async (senderCard, amount, deviceId, prisma) => {
       riskScore: 0, 
       decision: 'ALLOW', 
       riskLevel: 'LOW', 
-      riskFactors: ['Fraud analysis failed - transaction allowed by default'] 
+      riskFactors: ['Fraud analysis failed - transaction allowed by default'],
+      
+      // Return default values for all metrics
+      zScore: '0.00',
+      recentTxCount: 0,
+      avgAmount: '0',
+      stdDev: '0',
+      amountScore: 0,
+      velocityScore: 0
     };
   }
 };
