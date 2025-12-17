@@ -233,8 +233,8 @@ export default function DashboardScreen({ user, onLogout, onNavigateToNFC, onNav
           )}
         </View>
 
-        {/* SECTION 3: Connection Status - Backend online/offline status */}
-        <View style={styles.connectionCard}>
+        {/* SECTION 3: Connection Status - HIDDEN */}
+        {/* <View style={styles.connectionCard}>
           <View style={styles.connectionHeader}>
             <Text style={styles.connectionTitle}>Status Koneksi</Text>
             <TouchableOpacity style={styles.reconnectButton} onPress={checkBackendStatus} activeOpacity={0.7}>
@@ -253,7 +253,7 @@ export default function DashboardScreen({ user, onLogout, onNavigateToNFC, onNav
           {connectionStatus === 'offline' && (
             <Text style={styles.attemptsText}>Mode offline aktif - Data tersimpan lokal</Text>
           )}
-        </View>
+        </View> */}
 
         {/* SECTION 4: Action Buttons - Menu utama */}
         <View style={styles.actionsContainer}>
