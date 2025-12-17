@@ -340,6 +340,8 @@ router.delete('/:id', async (req, res) => {
     const { id } = req.params;
     const userId = parseInt(id);
 
+    console.log(`🗑️ [Backend] Delete user request for ID: ${userId}`);
+
     // Check if user exists
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -351,17 +353,38 @@ router.delete('/:id', async (req, res) => {
     });
 
     if (!user) {
+      console.log(`❌ [Backend] User ${userId} not found`);
       return res.status(404).json({ error: 'User tidak ditemukan' });
     }
 
+    console.log(`✅ [Backend] User found: ${user.username}`);
+
     // CASCADE DELETE: Delete all related records first
+    // URUTAN PENTING: Delete dari child table ke parent table
     
-    // 1. Delete user's NFC cards
+    // 1. Delete NFC transactions (child of NFCCard)
+    console.log(`🗑️ [Backend] Deleting NFC transactions for user ${userId}...`);
+    const userCards = await prisma.nFCCard.findMany({
+      where: { userId: userId },
+      select: { cardId: true }
+    });
+    
+    if (userCards.length > 0) {
+      const cardIds = userCards.map(card => card.cardId);
+      await prisma.nFCTransaction.deleteMany({
+        where: { cardId: { in: cardIds } }
+      });
+      console.log(`✅ [Backend] Deleted ${cardIds.length} card transactions`);
+    }
+    
+    // 2. Delete user's NFC cards
+    console.log(`🗑️ [Backend] Deleting NFC cards for user ${userId}...`);
     await prisma.nFCCard.deleteMany({
       where: { userId: userId }
     });
 
-    // 2. Delete user's transactions (both sent and received)
+    // 3. Delete user's transactions (both sent and received)
+    console.log(`🗑️ [Backend] Deleting transactions for user ${userId}...`);
     await prisma.transaction.deleteMany({
       where: {
         OR: [
@@ -371,22 +394,26 @@ router.delete('/:id', async (req, res) => {
       }
     });
 
-    // 3. Delete user's fraud alerts
+    // 4. Delete user's fraud alerts
+    console.log(`🗑️ [Backend] Deleting fraud alerts for user ${userId}...`);
     await prisma.fraudAlert.deleteMany({
       where: { userId: userId }
     });
 
-    // 4. Delete user's sessions
+    // 5. Delete user's sessions
+    console.log(`🗑️ [Backend] Deleting sessions for user ${userId}...`);
     await prisma.userSession.deleteMany({
       where: { userId: userId }
     });
 
-    // 5. Delete the user
+    // 6. Delete the user
+    console.log(`🗑️ [Backend] Deleting user ${userId}...`);
     await prisma.user.delete({
       where: { id: userId }
     });
 
-    // 6. Log admin action
+    // 7. Log admin action
+    console.log(`📝 [Backend] Logging admin action...`);
     await prisma.adminLog.create({
       data: {
         action: 'USER_DELETE',
@@ -405,7 +432,7 @@ router.delete('/:id', async (req, res) => {
       req.io.to('admin-room').emit('user-deleted', { userId: user.id });
     }
 
-    console.log(`✅ User ${user.username} (ID: ${user.id}) berhasil dihapus (cascade complete)`);
+    console.log(`✅ [Backend] User ${user.username} (ID: ${user.id}) berhasil dihapus (cascade complete)`);
 
     res.json({
       success: true,
@@ -418,8 +445,13 @@ router.delete('/:id', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Delete user error:', error);
-    res.status(500).json({ error: 'Gagal menghapus user' });
+    console.error('❌ [Backend] Delete user error:', error);
+    console.error('❌ [Backend] Error details:', error.message);
+    console.error('❌ [Backend] Error stack:', error.stack);
+    res.status(500).json({ 
+      error: 'Gagal menghapus user',
+      details: error.message 
+    });
   }
 });
 

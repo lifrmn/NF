@@ -1055,15 +1055,20 @@
             container.innerHTML = fraudAlerts.slice(0, 10).map(alert => {
                 const riskClass = `risk-${alert.riskLevel.toLowerCase()}`; // CSS class risk (high/medium/low)
                 const decisionClass = `decision-${alert.decision.toLowerCase()}`; // CSS class decision
+                
+                // Highlight khusus untuk BLOCK decision (user di-ban)
+                const isBlocked = alert.decision === 'BLOCK';
+                const alertStyle = isBlocked ? 'background: #ffebee; border: 2px solid #e74c3c; animation: pulse 2s infinite;' : '';
 
                 // Return HTML untuk 1 alert
                 return `
-                    <div class="fraud-alert">
+                    <div class="fraud-alert" style="${alertStyle}">
                         <div class="fraud-alert-header">
                             <div>
-                                <strong>🚨 ${alert.deviceName || alert.deviceId}</strong>
+                                ${isBlocked ? '🚫🚨' : '🚨'} <strong>${alert.deviceName || alert.deviceId}</strong>
                                 <span class="risk-badge ${riskClass}">${alert.riskLevel}</span>
                                 <span class="decision-badge ${decisionClass}">${alert.decision}</span>
+                                ${isBlocked ? '<span style="color: #e74c3c; font-weight: bold; margin-left: 10px;">⚠️ USER BANNED</span>' : ''}
                             </div>
                             <div style="font-size: 14px; color: #7f8c8d;">
                                 Risk Score: <strong style="color: #e74c3c;">${alert.riskScore}%</strong>
@@ -1071,6 +1076,14 @@
                             </div>
                         </div>
                         <div class="fraud-alert-content">
+                            ${isBlocked ? `
+                            <div style="background: #ffcdd2; padding: 10px; border-radius: 5px; margin-bottom: 10px; border-left: 4px solid #c0392b;">
+                                <strong style="color: #c0392b;">⚠️ AKSI DIPERLUKAN:</strong><br>
+                                User telah diblokir otomatis oleh sistem AI. Hubungi user untuk verifikasi atau investigasi lebih lanjut.<br>
+                                📞 CS: +62-XXX-XXX-XXXX | 📧 cs@nfcpayment.com
+                            </div>
+                            ` : ''}
+                            <div><strong>User ID:</strong> ${alert.userId || 'N/A'}</div>
                             <div><strong>Transaction ID:</strong> ${alert.transactionId || 'N/A'}</div>
                             <div><strong>IP Address:</strong> ${alert.ipAddress || 'Unknown'}</div>
 
@@ -2188,12 +2201,22 @@
                         'user-agent': 'okhttp/4.9.0'
                     }
                 })
-                .then(res => res.json())
+                .then(async res => {
+                    if (!res.ok) {
+                        const errorText = await res.text();
+                        throw new Error(`HTTP ${res.status}: ${errorText}`);
+                    }
+                    return res.json();
+                })
                 .then(data => {
+                    console.log('Delete response:', data);
                     if (data.success || data.message) {
                         logActivity('action', `✅ Deleted user: ${username}`, '#e74c3c');
                         alert('✅ User berhasil dihapus!');
-                        refreshAllData();
+                        // Reload page untuk force refresh data
+                        setTimeout(() => {
+                            window.location.reload();
+                        }, 500);
                     } else {
                         logActivity('error', `Failed to delete user: ${username}`, '#e74c3c');
                         alert('❌ Gagal delete user: ' + (data.error || 'Unknown error'));
@@ -2201,7 +2224,7 @@
                 })
                 .catch(err => {
                     console.error('Delete user error:', err);
-                    logActivity('error', `Error deleting user: ${username}`, '#e74c3c');
+                    logActivity('error', `Error deleting user: ${username} - ${err.message}`, '#e74c3c');
                     alert('❌ Error: ' + err.message);
                 });
             }

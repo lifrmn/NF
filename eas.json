@@ -19,7 +19,7 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "API_URL": "https://unbellicose-troublesomely-miley.ngrok-free.dev"
+        "API_URL": "http://10.3.5.191:4000"
       },
       "android": {
         "buildType": "apk",

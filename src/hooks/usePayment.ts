@@ -227,7 +227,16 @@ export const usePayment = () => {
         setIsProcessing(false);
         return true;
       } else {
-        Alert.alert('❌ Pembayaran Gagal', paymentResult.error || 'Terjadi kesalahan');
+        // Handle specific ban/block error
+        if (paymentResult.error === 'ACCOUNT_BANNED' || paymentResult.message?.includes('diblokir')) {
+          Alert.alert(
+            '🚫 Akun Diblokir',
+            paymentResult.message || 'Maaf, kamu tidak bisa akses pembayaran ini karena akun kamu di-ban. Harap hubungi Customer Service untuk informasi lebih lanjut.\n\n📞 CS: +62-XXX-XXX-XXXX\n📧 cs@nfcpayment.com',
+            [{ text: 'Mengerti' }]
+          );
+        } else {
+          Alert.alert('❌ Pembayaran Gagal', paymentResult.error || 'Terjadi kesalahan');
+        }
         setIsProcessing(false);
         return false;
       }
@@ -242,12 +251,18 @@ export const usePayment = () => {
         return false;
       }
       
-      // Handle rate limit error gracefully
+      // Handle specific errors
       if (error?.message?.includes('429')) {
         Alert.alert(
           '⏱️ Terlalu Banyak Request',
           'Tunggu sebentar dan coba lagi.',
           [{ text: 'OK' }]
+        );
+      } else if (error?.message?.includes('ACCOUNT_BANNED') || error?.message?.includes('diblokir')) {
+        Alert.alert(
+          '🚫 Akun Diblokir',
+          'Maaf, kamu tidak bisa akses pembayaran ini karena akun kamu di-ban. Harap hubungi Customer Service untuk informasi lebih lanjut.\n\n📞 CS: +62-XXX-XXX-XXXX\n📧 cs@nfcpayment.com',
+          [{ text: 'Mengerti' }]
         );
       } else {
         Alert.alert('❌ Error', error?.message || 'Gagal memproses pembayaran');

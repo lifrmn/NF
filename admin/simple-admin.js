@@ -13,13 +13,14 @@ const http = require('http'); // HTTP client untuk fetch backend
 const https = require('https'); // HTTPS client untuk fetch backend
 
 // ==================== KONFIGURASI ====================
-const PORT = 3001; // Port server (3001)
+const PORT = 3000; // Port server (3000)
 const APP_SECRET = 'NFC2025SecureApp'; // Secret key aplikasi (untuk validasi)
 const ADMIN_PASSWORD = 'admin123'; // Password admin untuk top-up saldo
 
-// NGROK CONFIGURATION - Ubah URL ini sesuai dengan ngrok tunnel Anda
-const NGROK_URL = 'https://unbellicose-troublesomely-miley.ngrok-free.dev'; // URL ngrok backend
-const BACKEND_URL = NGROK_URL; // Backend URL (gunakan ngrok)
+// BACKEND CONFIGURATION
+// Admin server dan backend di laptop yang sama, jadi pakai localhost
+const BACKEND_URL = 'http://localhost:4000'; // Backend URL (localhost karena sama-sama di laptop)
+const NGROK_URL = 'https://unbellicose-troublesomely-miley.ngrok-free.dev'; // URL ngrok untuk mobile app
 
 // Helper function untuk parsing URL
 function parseBackendUrl() {
@@ -956,13 +957,17 @@ class SimpleNFCAdmin {
     try {
       const userId = parseInt(req.params.id); // Ambil user ID dari URL
       
+      console.log(`🗑️ DELETE request for user ID: ${userId}`);
+      
       // Validasi userId wajib ada
       if (!userId) {
+        console.log('❌ No user ID provided');
         return res.status(400).json({ error: 'User ID required' });
       }
 
       // Parse backend URL
       const backendConfig = parseBackendUrl();
+      console.log(`📡 Connecting to backend: ${backendConfig.protocol}://${backendConfig.hostname}:${backendConfig.port}`);
 
       // Kirim delete ke backend
       try {
@@ -973,34 +978,44 @@ class SimpleNFCAdmin {
             path: `/api/users/${userId}`,
             method: 'DELETE',
             headers: {
-              'Content-Type': 'application/json'
+              'Content-Type': 'application/json',
+              'x-app-key': APP_SECRET,
+              'user-agent': 'admin-dashboard/1.0'
             }
           };
+          
+          console.log(`📤 Sending DELETE to: ${options.path}`);
           
           // Select correct client based on protocol
           const client = backendConfig.protocol === 'https' ? https : http;
           const request = client.request(options, (response) => {
             let data = '';
             
+            console.log(`📥 Response status: ${response.statusCode}`);
+            
             response.on('data', (chunk) => {
               data += chunk;
             });
             
             response.on('end', () => {
+              console.log(`📦 Response data:`, data.substring(0, 200));
               try {
                 const jsonData = JSON.parse(data);
                 resolve(jsonData);
               } catch (parseError) {
-                reject(parseError);
+                console.error('❌ JSON parse error:', parseError.message);
+                reject(new Error(`Parse error: ${data.substring(0, 100)}`));
               }
             });
           });
           
           request.on('error', (error) => {
+            console.error('❌ Request error:', error.message);
             reject(error);
           });
           
           request.setTimeout(5000, () => {
+            console.error('❌ Request timeout');
             request.abort();
             reject(new Error('Timeout'));
           });
@@ -1008,17 +1023,17 @@ class SimpleNFCAdmin {
           request.end();
         });
         
-        console.log(`✅ Deleted user ${userId} from backend`);
+        console.log(`✅ Deleted user ${userId} from backend:`, backendData);
         res.json(backendData);
         
       } catch (backendError) {
-        console.error('Backend delete error:', backendError.message);
-        res.status(500).json({ error: 'Failed to delete user from backend' });
+        console.error('❌ Backend delete error:', backendError.message);
+        res.status(500).json({ error: 'Failed to delete user from backend', details: backendError.message });
       }
 
     } catch (error) {
       console.error('❌ Delete user error:', error);
-      res.status(500).json({ error: 'Failed to delete user' });
+      res.status(500).json({ error: 'Failed to delete user', details: error.message });
     }
   }
 

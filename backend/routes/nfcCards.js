@@ -15,8 +15,17 @@ const validateCardId = (cardId) => {
 };
 
 const encryptCardData = (data) => {
-  const cipher = crypto.createCipher('aes-256-cbc', process.env.NFC_ENCRYPTION_KEY || 'default-nfc-key');
-  return cipher.update(data, 'utf8', 'hex') + cipher.final('hex');
+  try {
+    const key = crypto.scryptSync(process.env.NFC_ENCRYPTION_KEY || 'default-nfc-key', 'salt', 32);
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+    const encrypted = Buffer.concat([cipher.update(data, 'utf8'), cipher.final()]);
+    return iv.toString('hex') + ':' + encrypted.toString('hex');
+  } catch (error) {
+    console.error('Encryption error:', error);
+    // Fallback: return hash untuk simple storage
+    return crypto.createHash('sha256').update(data).digest('hex');
+  }
 };
 
 const validateUser = async (userId) => {
@@ -32,9 +41,11 @@ const formatCurrency = (amount) => {
 };
 
 // ============================================================================
-// FRAUD DETECTION: 2-Factor Model (Amount Anomaly + Velocity Detection)
 // ============================================================================
-// Algorithm: Z-Score Based Anomaly Detection with Velocity Analysis
+// FRAUD DETECTION: Statistical Anomaly Detection
+// ============================================================================
+// Method: Statistical Anomaly Detection
+// Algorithm: Z-Score Based Anomaly Detection
 // Academic Reference: Chandola et al. (2009) - Anomaly Detection Survey
 // ============================================================================
 const analyzeFraudRisk = async (senderCard, amount, deviceId, prisma) => {
@@ -67,157 +78,112 @@ const analyzeFraudRisk = async (senderCard, amount, deviceId, prisma) => {
         riskLevel: 'LOW',
         riskFactors: ['First transaction - No historical data for comparison'],
         zScore: '0.00',
-        recentTxCount: 0,
         avgAmount: '0',
-        stdDev: '0',
-        amountScore: 0,
-        velocityScore: 0
+        stdDev: '0'
       };
     }
 
     // =========================================================================
-    // FACTOR 1: Amount Anomaly Detection using Z-Score (Weight: 60%)
+    // Z-SCORE ANOMALY DETECTION
     // =========================================================================
-    // Z-Score Formula: Z = |X - μ| / σ
-    // Where: X = current amount, μ = mean, σ = standard deviation
+    // Formula: Z = (X - μ) / σ
+    // Where:
+    //   X = current transaction amount
+    //   μ = mean (average of historical transactions)
+    //   σ = standard deviation
     // =========================================================================
     
     const amounts = recentTransactions.map(t => t.amount);
     
-    // Calculate mean (average amount)
+    // Step 1: Calculate mean (μ)
     const avgAmount = amounts.length > 0 
       ? amounts.reduce((a, b) => a + b, 0) / amounts.length 
       : 0;
     
-    // Calculate variance and standard deviation
+    // Step 2: Calculate variance (σ²)
     const variance = amounts.length > 1 
       ? amounts.reduce((sum, val) => sum + Math.pow(val - avgAmount, 2), 0) / amounts.length 
       : 0;
     
+    // Step 3: Calculate standard deviation (σ)
     const stdDev = Math.sqrt(variance);
     
-    // Calculate Z-Score (normalized distance from mean)
+    // Step 4: Calculate Z-Score
     const zScore = stdDev > 0 ? Math.abs((amount - avgAmount) / stdDev) : 0;
 
-    // Amount anomaly scoring based on statistical significance
-    let amountScore = 0;
-    if (zScore > 3) {
-      // Extreme outlier: 99.7% confidence interval (3-sigma rule)
-      amountScore = 60;
-    } else if (zScore > 2) {
-      // Significant outlier: 95% confidence interval (2-sigma rule)
-      amountScore = 30;
-    } else if (zScore > 1) {
-      // Mild outlier: 68% confidence interval (1-sigma rule)
-      amountScore = 10;
-    }
+    // =========================================================================
+    // RISK CLASSIFICATION BASED ON Z-SCORE
+    // =========================================================================
+    // Using 3-Sigma Rule (Empirical Rule):
+    //   Z > 3σ → BLOCK  (99.7% confidence - extreme outlier)
+    //   Z > 2σ → REVIEW (95% confidence - significant outlier)
+    //   Z ≤ 2σ → ALLOW  (normal transaction)
+    // =========================================================================
+    
+    const classificationRules = [
+      { 
+        threshold: 3, 
+        decision: 'BLOCK', 
+        riskLevel: 'HIGH',
+        riskScore: 100,
+        message: '⛔ Transaction BLOCKED - Extreme outlier (>3σ, 99.7% confidence)'
+      },
+      { 
+        threshold: 2, 
+        decision: 'REVIEW', 
+        riskLevel: 'MEDIUM',
+        riskScore: 50,
+        message: '⚠️ Manual REVIEW required - Significant outlier (>2σ, 95% confidence)'
+      },
+      { 
+        threshold: 0, 
+        decision: 'ALLOW', 
+        riskLevel: 'LOW',
+        riskScore: 0,
+        message: '✅ Transaction ALLOWED - Normal pattern (≤2σ)'
+      }
+    ];
+    
+    const matchedRule = classificationRules.find(rule => zScore > rule.threshold);
+    const { decision, riskLevel, riskScore, message } = matchedRule;
 
-    // =========================================================================
-    // FACTOR 2: Velocity Detection - Rapid-Fire Attack (Weight: 40%)
-    // =========================================================================
-    // Algorithm: Sliding Window Time-Series Analysis
-    // Window: 60 seconds (1 minute)
-    // =========================================================================
-    
-    const oneMinuteAgo = new Date(Date.now() - 60 * 1000);
-    const recentTxCount = recentTransactions.filter(
-      t => new Date(t.createdAt) > oneMinuteAgo
-    ).length;
+    // Build risk factors for explainability
+    const riskFactors = [
+      `Z-Score: ${zScore.toFixed(2)}σ deviation from mean`,
+      `Historical average: Rp ${avgAmount.toFixed(0)}`,
+      `Standard deviation: Rp ${stdDev.toFixed(0)}`,
+      `Current amount: Rp ${amount}`,
+      message
+    ];
 
-    // Velocity scoring based on transaction frequency
-    let velocityScore = 0;
-    if (recentTxCount >= 5) {
-      // High velocity: Likely automated bot attack (>5 tx/min)
-      velocityScore = 40;
-    } else if (recentTxCount >= 3) {
-      // Moderate velocity: Suspicious pattern (3-4 tx/min)
-      velocityScore = 20;
-    }
+    console.log(`📊 Fraud Analysis - User: ${senderCard.userId}`);
+    console.log(`   Amount: Rp ${amount} | Avg: Rp ${avgAmount.toFixed(0)} | StdDev: Rp ${stdDev.toFixed(0)}`);
+    console.log(`   Z-Score: ${zScore.toFixed(2)}σ | Decision: ${decision} | Risk: ${riskLevel}`);
 
-    // =========================================================================
-    // TOTAL RISK SCORE CALCULATION (0-100%)
-    // =========================================================================
-    // Risk Score = Amount Score (0-60) + Velocity Score (0-40)
-    // =========================================================================
-    
-    const totalRiskScore = amountScore + velocityScore;
-
-    // Build risk factors array for transparency and explainability
-    const riskFactors = [];
-    
-    if (amountScore > 0) {
-      riskFactors.push(
-        `Amount anomaly: ${zScore.toFixed(1)}σ from mean (Score: +${amountScore})`
-      );
-    }
-    
-    if (velocityScore > 0) {
-      riskFactors.push(
-        `High velocity: ${recentTxCount} transactions/min (Score: +${velocityScore})`
-      );
-    }
-    
-    if (totalRiskScore === 0) {
-      riskFactors.push('Normal transaction pattern detected');
-    }
-
-    // =========================================================================
-    // DECISION MAKING: Threshold-Based Classification
-    // =========================================================================
-    // Decision Boundaries:
-    //   - [70-100%] → BLOCK  (High Risk)
-    //   - [40-69%]  → REVIEW (Medium Risk)
-    //   - [0-39%]   → ALLOW  (Low Risk)
-    // =========================================================================
-    
-    let decision, riskLevel;
-    
-    if (totalRiskScore >= 70) {
-      decision = 'BLOCK';
-      riskLevel = 'HIGH';
-      riskFactors.push('⛔ Action: Transaction BLOCKED due to high risk');
-    } else if (totalRiskScore >= 40) {
-      decision = 'REVIEW';
-      riskLevel = 'MEDIUM';
-      riskFactors.push('⚠️ Action: Manual REVIEW required by admin');
-    } else {
-      decision = 'ALLOW';
-      riskLevel = 'LOW';
-      riskFactors.push('✅ Action: Transaction ALLOWED - Normal pattern');
-    }
-
-    // Return comprehensive fraud analysis result
+    // Return fraud analysis result
     return {
-      riskScore: totalRiskScore,
+      riskScore,
       decision,
       riskLevel,
       riskFactors,
       
-      // Detailed metrics for logging and debugging
+      // Detailed metrics for logging
       zScore: zScore.toFixed(2),
-      recentTxCount,
       avgAmount: avgAmount.toFixed(0),
-      stdDev: stdDev.toFixed(0),
-      amountScore,
-      velocityScore
+      stdDev: stdDev.toFixed(0)
     };
 
   } catch (error) {
     console.error('❌ Fraud analysis error:', error);
-    // Fail-safe: Allow transaction if analysis fails (avoid blocking legitimate users)
+    // Fail-safe: Allow transaction if analysis fails
     return { 
       riskScore: 0, 
       decision: 'ALLOW', 
       riskLevel: 'LOW', 
       riskFactors: ['Fraud analysis failed - transaction allowed by default'],
-      
-      // Return default values for all metrics
       zScore: '0.00',
-      recentTxCount: 0,
       avgAmount: '0',
-      stdDev: '0',
-      amountScore: 0,
-      velocityScore: 0
+      stdDev: '0'
     };
   }
 };
@@ -255,7 +221,18 @@ router.post('/register', async (req, res) => {
 
     const encryptedData = cardData ? encryptCardData(cardData) : null;
 
-    // Buat record kartu NFC baru
+    // Get user balance untuk sync ke card (jika ada userId)
+    let initialBalance = 0;
+    if (userId) {
+      const userWithBalance = await prisma.user.findUnique({
+        where: { id: parseInt(userId) },
+        select: { balance: true }
+      });
+      initialBalance = userWithBalance?.balance || 0;
+      console.log(`💰 Syncing card balance with user balance: Rp ${initialBalance.toLocaleString('id-ID')}`);
+    }
+
+    // Buat record kartu NFC baru dengan balance = balance user
     const nfcCard = await prisma.nFCCard.create({
       data: {
         cardId,
@@ -263,7 +240,7 @@ router.post('/register', async (req, res) => {
         frequency: '13.56MHz',
         userId: userId ? parseInt(userId) : null,
         cardStatus: 'ACTIVE',
-        balance: 0,
+        balance: initialBalance, // ✅ Balance card = balance user
         cardData: encryptedData,
         metadata: metadata ? JSON.stringify(metadata) : null,
         isPhysical: true
@@ -273,13 +250,14 @@ router.post('/register', async (req, res) => {
           select: {
             id: true,
             name: true,
-            username: true
+            username: true,
+            balance: true
           }
         }
       }
     });
 
-    console.log(`🎴 NFC Card registered: ${cardId.slice(0, 8)}... ${userId ? `for user ${userId}` : '(unassigned)'}`);
+    console.log(`🎴 NFC Card registered: ${cardId.slice(0, 8)}... ${userId ? `for user ${userId} with balance Rp ${initialBalance.toLocaleString('id-ID')}` : '(unassigned)'}`);
 
     res.status(201).json({
       success: true,
@@ -503,11 +481,12 @@ router.post('/payment', async (req, res) => {
         
         // Log fraud detection results
         console.log('🔍 Fraud Detection Analysis:');
-        console.log(`   └─ Risk Score: ${fraudAnalysis.riskScore}% (Amount: ${fraudAnalysis.amountScore}, Velocity: ${fraudAnalysis.velocityScore})`);
+        console.log(`   └─ Risk Score: ${fraudAnalysis.riskScore}`);
         console.log(`   └─ Decision: ${fraudAnalysis.decision} (${fraudAnalysis.riskLevel} risk)`);
-        console.log(`   └─ Z-Score: ${fraudAnalysis.zScore}σ | Velocity: ${fraudAnalysis.recentTxCount} tx/min`);
+        console.log(`   └─ Z-Score: ${fraudAnalysis.zScore}σ deviation from mean`);
         
-        if (fraudAnalysis.riskScore >= 40) {
+        // Create fraud alert for REVIEW and BLOCK cases
+        if (fraudAnalysis.decision === 'REVIEW' || fraudAnalysis.decision === 'BLOCK') {
           await prisma.fraudAlert.create({
             data: {
               userId: senderCard.userId,
@@ -517,32 +496,34 @@ router.post('/payment', async (req, res) => {
               riskLevel: fraudAnalysis.riskLevel,
               decision: fraudAnalysis.decision,
               reasons: JSON.stringify(fraudAnalysis.riskFactors),
-              confidence: Math.min(fraudAnalysis.riskScore / 100, 0.95),
+              confidence: fraudAnalysis.riskScore === 100 ? 0.997 : 0.95, // 3σ = 99.7%, 2σ = 95%
               riskFactors: JSON.stringify({
                 cardId: cardId.slice(0, 8) + '...',
                 amount: amountNum,
                 zScore: fraudAnalysis.zScore,
-                velocity: fraudAnalysis.recentTxCount,
                 avgAmount: fraudAnalysis.avgAmount,
-                stdDev: fraudAnalysis.stdDev
+                stdDev: fraudAnalysis.stdDev,
+                historicalTransactions: 15
               }),
               ipAddress: req.ip
             }
           });
-          console.log(`🚨 Fraud Alert Created: Risk ${fraudAnalysis.riskScore}% → ${fraudAnalysis.decision}`);
+          console.log(`🚨 Fraud Alert Created: Risk ${fraudAnalysis.riskScore} → ${fraudAnalysis.decision}`);
         }
 
         if (fraudAnalysis.decision === 'BLOCK') {
           return res.status(403).json({
-            error: 'Transaction blocked by fraud detection',
+            error: 'ACCOUNT_BANNED',
+            message: 'Maaf, akun Anda telah diblokir karena terdeteksi aktivitas mencurigakan. Silakan hubungi Customer Service untuk informasi lebih lanjut.',
             riskScore: fraudAnalysis.riskScore,
             riskLevel: fraudAnalysis.riskLevel,
-            reasons: fraudAnalysis.riskFactors
+            reasons: fraudAnalysis.riskFactors,
+            contactInfo: 'Hubungi CS: +62-XXX-XXX-XXXX atau email: cs@nfcpayment.com'
           });
         }
 
         if (fraudAnalysis.decision === 'REVIEW') {
-          console.log(`⚠️ Review Required: Card ${cardId.slice(0, 8)}... | Risk: ${fraudAnalysis.riskScore}%`);
+          console.log(`⚠️ Review Required: Card ${cardId.slice(0, 8)}... | Z-Score: ${fraudAnalysis.zScore}σ`);
         }
       } catch (fraudError) {
         console.error('Fraud detection error:', fraudError);
@@ -586,11 +567,12 @@ router.post('/payment', async (req, res) => {
         }
       });
 
-      // Update sender card lastUsed
+      // ✅ Update sender card: lastUsed + sync balance dengan user
       const updatedSenderCard = await tx.nFCCard.update({
         where: { cardId },
         data: { 
-          lastUsed: new Date()
+          lastUsed: new Date(),
+          balance: updatedSenderUser.balance  // Sync card balance = user balance
         }
       });
 
@@ -610,11 +592,12 @@ router.post('/payment', async (req, res) => {
           data: { balance: { increment: amountNum } }
         });
 
-        // Update receiver card lastUsed
+        // ✅ Update receiver card: lastUsed + sync balance dengan user
         updatedReceiverCard = await tx.nFCCard.update({
           where: { cardId: receiverCardId },
           data: { 
-            lastUsed: new Date()
+            lastUsed: new Date(),
+            balance: updatedReceiverUser.balance  // Sync card balance = user balance
           }
         });
       } else {
