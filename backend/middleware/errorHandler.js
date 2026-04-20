@@ -1,49 +1,80 @@
-const errorHandler = (err, req, res, next) => {
-  console.error('Error:', err);
+// ============================================================
+// ERRORHANDLER.JS - MIDDLEWARE ERROR HANDLING TERPUSAT
+// ============================================================
+// File ini berisi middleware untuk handle error secara terpusat
+// Semua error yang tidak tertangkap di endpoint akan ditangkap di sini
+// 
+// Cara kerja:
+// 1. Endpoint throw error atau panggil next(error)
+// 2. Error akan "jatuh" ke middleware ini (karena ada 4 parameter: err, req, res, next)
+// 3. Middleware ini cek tipe error dan return response yang sesuai
+// 4. Client dapat error message yang informatif
+//
+// Error types yang ditangani:
+// - Prisma errors (P2002, P2025, dll)
+// - Validation errors
+// - JWT errors (JsonWebTokenError, TokenExpiredError)
+// - Generic errors
 
-  // Prisma errors
+// ===============================================================
+// FUNGSI: errorHandler - Middleware untuk handle semua error
+// ===============================================================
+// Fungsi ini dipanggil otomatis oleh Express saat ada error
+// Usage: app.use(errorHandler) <- ditaruh di paling akhir setelah semua routes
+const errorHandler = (err, req, res, next) => {
+  // STEP 1: Log error ke console untuk debugging
+  console.error('Error:', err); // Log full error object
+
+  // STEP 2: Handle Prisma errors
+  // Prisma error code P2002 = Unique constraint violation (duplicate entry)
   if (err.code === 'P2002') {
     return res.status(400).json({
-      error: 'Duplicate entry',
-      details: 'A record with this information already exists'
+      error: 'Duplicate entry', // Error message user-friendly
+      details: 'A record with this information already exists' // Detail lebih spesifik
     });
   }
 
+  // Prisma error code P2025 = Record not found
   if (err.code === 'P2025') {
     return res.status(404).json({
-      error: 'Record not found',
-      details: 'The requested record does not exist'
+      error: 'Record not found', // Error message user-friendly
+      details: 'The requested record does not exist' // Detail lebih spesifik
     });
   }
 
-  // Validation errors
+  // STEP 3: Handle validation errors
+  // Validation error terjadi saat data tidak sesuai format (dari express-validator)
   if (err.name === 'ValidationError') {
     return res.status(400).json({
-      error: 'Validation error',
-      details: err.message
+      error: 'Validation error', // Error type
+      details: err.message // Detail error (field mana yang salah)
     });
   }
 
-  // JWT errors
+  // STEP 4: Handle JWT errors
+  // JsonWebTokenError = Token format salah atau signature tidak valid
   if (err.name === 'JsonWebTokenError') {
     return res.status(401).json({
-      error: 'Invalid token',
-      details: 'The provided token is invalid'
+      error: 'Invalid token', // Error message
+      details: 'The provided token is invalid' // Detail lebih spesifik
     });
   }
 
+  // TokenExpiredError = Token sudah expired (melewati waktu exp)
   if (err.name === 'TokenExpiredError') {
     return res.status(401).json({
-      error: 'Token expired',
-      details: 'The provided token has expired'
+      error: 'Token expired', // Error message
+      details: 'The provided token has expired' // Detail lebih spesifik
     });
   }
 
-  // Default error
+  // STEP 5: Default error handler (untuk error yang tidak dikenali)
+  // Return 500 Internal Server Error dengan error message generic
   res.status(err.status || 500).json({
-    error: err.message || 'Internal server error',
-    details: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    error: err.message || 'Internal server error', // Error message (dari err.message atau default)
+    details: process.env.NODE_ENV === 'development' ? err.stack : undefined // Stack trace hanya di development mode
   });
 };
 
+// Export errorHandler agar bisa diimport di server.js
 module.exports = { errorHandler };

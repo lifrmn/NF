@@ -1,3 +1,116 @@
+// src/utils/nfc.ts
+/* ==================================================================================
+ * 📡 UTILITY: NFCService
+ * ==================================================================================
+ * 
+ * Purpose:
+ * Comprehensive NFC (Near Field Communication) service untuk handle semua operasi
+ * pembacaan dan penulisan NFC physical cards (NTag215).
+ * Core utility untuk contactless payment system dengan physical NFC cards.
+ * 
+ * Technology Stack:
+ * - Library: react-native-nfc-manager
+ * - Card Type: NTag215 (NXP Semiconductors)
+ * - Frequency: 13.56 MHz (HF - High Frequency)
+ * - Protocol: ISO/IEC 14443 Type A
+ * - Memory: 540 bytes user memory (144 bytes NDEF)
+ * - Format: NDEF (NFC Data Exchange Format)
+ * 
+ * NTag215 Specifications:
+ * ┌────────────────────────────────────────────────────────────────────┐
+ * │ Memory Structure:                                                   │
+ * │ - Total: 540 bytes                                                  │
+ * │ - User Memory: 504 bytes (pages 4-129)                             │
+ * │ - NDEF Message: Up to 144 bytes                                     │
+ * │ - UID: 7 bytes (unique identifier)                                  │
+ * │ - Read/Write: Multiple times (not one-time programmable)           │
+ * │ - Security: Password protection available (32-bit)                  │
+ * └────────────────────────────────────────────────────────────────────┘
+ * 
+ * Use Cases:
+ * 
+ * 1. Payment Transactions:
+ *    - Buyer tap card to merchant's phone
+ *    - System read card UID untuk identify user
+ *    - Backend process payment: buyer balance → merchant balance
+ *    - No internet required on card (backend handles transaction)
+ * 
+ * 2. Card Registration:
+ *    - New user scan physical NTag215 card
+ *    - System read card UID (unique identifier)
+ *    - Backend register card to user account
+ *    - Card becomes linked payment instrument
+ * 
+ * 3. Card Validation:
+ *    - Read card info (UID, type, manufacturer)
+ *    - Validate card is NTag215 (not Mifare, etc.)
+ *    - Check card status (active, blocked, lost)
+ *    - Verify card ownership
+ * 
+ * Architecture Overview:
+ * ┌─────────────────────────────────────────────────────────────────────┐
+ * │                         NFC OPERATION FLOW                          │
+ * ├─────────────────────────────────────────────────────────────────────┤
+ * │                                                                      │
+ * │  Mobile App (React Native)                                          │
+ * │       ↓                                                              │
+ * │  NFCService.readPhysicalCard()                                      │
+ * │       ↓                                                              │
+ * │  react-native-nfc-manager                                           │
+ * │       ↓                                                              │
+ * │  Native NFC Hardware (Android/iOS)                                  │
+ * │       ↓                                                              │
+ * │  Physical NTag215 Card (13.56 MHz RF)                               │
+ * │       ↓                                                              │
+ * │  Read UID + NDEF Data                                               │
+ * │       ↓                                                              │
+ * │  Return to App: { id, type, manufacturer }                          │
+ * │       ↓                                                              │
+ * │  Backend API: Validate & Process                                    │
+ * │                                                                      │
+ * └─────────────────────────────────────────────────────────────────────┘
+ * 
+ * Key Methods:
+ * 
+ * 1. initNFC():
+ *    - Initialize NFC hardware
+ *    - Check device support & enabled status
+ *    - Called on app startup
+ * 
+ * 2. readPhysicalCard():
+ *    - Read physical NTag215 card UID
+ *    - Most important method untuk payment flow
+ *    - Returns: { id, type, manufacturer }
+ * 
+ * 3. writePhysicalCard():
+ *    - Write NDEF data to card (optional)
+ *    - Usually not needed (we only use UID)
+ *    - For future features
+ * 
+ * 4. checkNFCEnabled():
+ *    - Check NFC enabled in device settings
+ *    - Called before NFC operations
+ * 
+ * 5. cleanup():
+ *    - Release NFC resources
+ *    - Called on component unmount
+ * 
+ * Error Handling:
+ * - Device not support NFC: Return false, fallback to manual mode
+ * - NFC disabled: Show alert with instructions
+ * - Card read error: Return null, prompt retry
+ * - Timeout: Cancel after 30 seconds
+ * 
+ * Security Considerations:
+ * - UID is public (can be cloned)
+ * - Backend must validate card ownership
+ * - Backend check card status (active, blocked)
+ * - Backend verify transaction legitimacy
+ * - Card balance stored in backend (not on card)
+ * 
+ * ==================================================================================
+ */
+
 // ============================================================================
 // IMPORTS - Library yang dibutuhkan
 // ============================================================================

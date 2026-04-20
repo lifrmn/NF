@@ -1,4 +1,218 @@
 <!DOCTYPE html>
+<!--
+=====================================================================
+📊 ADMIN DASHBOARD - NFC PAYMENT SYSTEM
+=====================================================================
+FILE: admin/simple-dashboard.html
+TIPE: Web Frontend (HTML + CSS + JavaScript)
+TUJUAN: Web-based Admin Dashboard untuk monitoring dan kontrol system
+
+FITUR UTAMA:
+═══════════════════════════════════════════════════════════════════════
+1. 📊 REAL-TIME MONITORING
+   - Activity log semua events (transaksi, login, fraud)
+   - Auto-refresh setiap 30 detik
+   - Manual refresh on-demand
+   - Visual stats dengan progress bars
+
+2. 👥 USER MANAGEMENT
+   - Table list semua users
+   - Create/Edit/Delete user via modal
+   - Block/Unblock user
+   - View user details dan balance
+   - Search/filter users
+
+3. 💳 NFC CARD MANAGEMENT
+   - List all registered cards
+   - Card status: ACTIVE, BLOCKED, LOST, EXPIRED
+   - Link/unlink card to user
+   - Block/activate card
+   - Top-up card balance
+   - Delete card (admin only)
+   - 1-card-per-user policy enforcement
+
+4. 🚨 FRAUD DETECTION MONITORING
+   - Visual fraud alert cards
+   - Risk level: LOW, MEDIUM, HIGH, CRITICAL
+   - Transaction details
+   - Alert timestamp
+   - Clear alerts functionality
+   - Fraud statistics (total alerts, blocked, review)
+
+5. 💰 BALANCE MANAGEMENT
+   - Individual user top-up
+   - Bulk top-up all users
+   - Reset user balance to 0
+   - Admin password protection
+   - Maximum limit: Rp 500,000 per transaction
+
+6. 📡 BACKEND STATUS
+   - Backend health check
+   - Connection status indicator
+   - Request error handling
+   - Offline fallback
+
+UI COMPONENTS:
+═══════════════════════════════════════════════════════════════════════
+SECTIONS:
+1. Header → Title, description, info banner
+2. Real-time Activity Log → Console-style log with auto-scroll
+3. Quick Actions → 6 action buttons (block, unblock, reset, etc.)
+4. Dashboard Controls → Manual/auto refresh toggle
+5. Fraud Detection Panel → Alert cards, statistics, clear button
+6. Users Table → List, search, create, edit, delete
+7. NFC Cards Table → List, link, block, topup, delete
+8. Modals → Forms untuk create/edit/action inputs
+
+COLOR CODING:
+- Primary Blue (#3498db) → Headers, info
+- Success Green (#27ae60) → Active status, success messages
+- Warning Orange (#f39c12) → Medium risk, warnings
+- Danger Red (#e74c3c) → Critical risk, blocked, delete
+- Purple (#9b59b6) → Activity log section
+- Dark Gray (#2c3e50) → Log background
+
+RESPONSIVE DESIGN:
+- Grid layout: auto-fit minmax(250px, 1fr)
+- Mobile-friendly tables dengan horizontal scroll
+- Modal dialogs dengan backdrop
+- Touch-friendly button sizes
+
+API ENDPOINTS CALLED:
+═══════════════════════════════════════════════════════════════════════
+USER ENDPOINTS:
+- GET    /api/users                → Load users table
+- POST   /api/users                → Create new user
+- PUT    /api/users/:id            → Update user
+- DELETE /api/users/:id            → Delete user
+- POST   /api/block-user           → Block user
+- POST   /api/unblock-user         → Unblock user
+- POST   /api/bulk-topup           → Bulk top-up
+- POST   /api/reset-balance        → Reset balance
+
+NFC CARD ENDPOINTS:
+- GET    /api/nfc-cards            → Load cards table
+- POST   /api/nfc-cards/register   → Register new card
+- POST   /api/nfc-cards/link       → Link card to user
+- POST   /api/nfc-cards/block      → Block card
+- POST   /api/nfc-cards/topup      → Top-up card
+- DELETE /api/nfc-cards/:cardId    → Delete card
+
+FRAUD ENDPOINTS:
+- GET    /api/fraud-alerts         → Load fraud alerts
+- POST   /api/clear-fraud-alerts   → Clear all alerts
+
+SYSTEM ENDPOINTS:
+- GET    /api/ping                 → Health check
+
+DATA REFRESH:
+═══════════════════════════════════════════════════════════════════════
+1. AUTO-REFRESH:
+   - Interval: 30 detik
+   - Toggle on/off via checkbox
+   - Refresh: users, cards, fraud alerts, backend status
+
+2. MANUAL REFRESH:
+   - Button: 🔄 Refresh Data Manual
+   - On-demand update
+   - Same data as auto-refresh
+
+MODAL DIALOGS:
+═══════════════════════════════════════════════════════════════════════
+1. Create User Modal
+   - Input: username, name, email, phone, password, initialBalance
+   - Validation: All fields required
+   - Submit: POST /api/users
+
+2. Edit User Modal
+   - Input: name, email, phone (username tidak bisa diubah)
+   - Pre-filled dengan data existing
+   - Submit: PUT /api/users/:id
+
+3. Block User Modal
+   - Input: userId (from user selection), adminPassword
+   - Confirmation dialog
+   - Submit: POST /api/block-user
+
+4. Unblock User Modal
+   - Input: userId, adminPassword
+   - Submit: POST /api/unblock-user
+
+5. Reset Balance Modal
+   - Input: userId, newBalance, adminPassword
+   - Submit: POST /api/reset-balance
+
+6. Bulk Top-up Modal
+   - Input: amount (untuk semua users), adminPassword
+   - Confirmation dengan total users affected
+   - Submit: POST /api/bulk-topup
+
+7. Top-up User Modal
+   - Input: userId, amount, adminPassword
+   - Max: Rp 500,000
+   - Submit: POST /api/update-balance
+
+8. Register NFC Card Modal
+   - Input: cardUid, userId (optional)
+   - Submit: POST /api/nfc-cards/register
+
+9. Link NFC Card Modal
+   - Input: cardId, userId
+   - 1-card-per-user check
+   - Submit: POST /api/nfc-cards/link
+
+10. Top-up NFC Card Modal
+    - Input: cardId, amount, adminPassword
+    - Submit: POST /api/nfc-cards/topup
+
+SECURITY:
+═══════════════════════════════════════════════════════════════════════
+- Admin password validation (admin123)
+- Password masking in input fields
+- Confirmation dialogs untuk destructive actions
+- Error messages untuk unauthorized access
+- CORS allowed dari admin server
+
+ACTIVITY LOG:
+═══════════════════════════════════════════════════════════════════════
+Log Format: [HH:MM:SS] Icon Message
+Examples:
+- ✅ User created: john_doe
+- 💰 Balance updated: +50000 for user 123
+- 🚨 FRAUD ALERT: HIGH risk transaction
+- 🚫 User blocked: suspicious activity
+- ✅ NFC card registered: 04:A1:B2:C3:D4:E5:F6
+
+USAGE:
+═══════════════════════════════════════════════════════════════════════
+1. Start admin server: node admin/simple-admin.js
+2. Open browser: http://localhost:3000
+3. Dashboard auto-loads data setiap 30 detik
+4. Use quick actions atau table actions untuk manage system
+5. Monitor activity log untuk audit trail
+
+DEPENDENCIES:
+═══════════════════════════════════════════════════════════════════════
+- None (Pure HTML + CSS + JavaScript)
+- No framework required (vanilla JS)
+- Fetch API untuk backend communication
+
+BROWSER SUPPORT:
+═══════════════════════════════════════════════════════════════════════
+- Modern browsers (Chrome, Firefox, Edge, Safari)
+- ES6+ features (async/await, fetch, template literals)
+- CSS Grid & Flexbox
+
+RELATED FILES:
+═══════════════════════════════════════════════════════════════════════
+- admin/simple-admin.js → Backend admin server
+- backend/server.js     → Main backend API
+- src/screens/          → Mobile app screens
+
+@version 1.0.0
+@author NFC Payment Team
+@created 2025
+-->
 <!-- ADMIN DASHBOARD NFC PAYMENT -->
 <!-- Dashboard untuk monitor dan kontrol sistem pembayaran NFC -->
 <html lang="id">
@@ -1003,7 +1217,7 @@
         // Load data fraud alerts dari backend
         async function loadFraudAlerts() {
             try {
-                const response = await fetch('/api/fraud-alerts'); // Ambil data API
+                const response = await fetch('/api/fraud/alerts'); // Ambil data API
                 if (response.ok) { // Jika sukses
                     const data = await response.json(); // Parse JSON
                     fraudAlerts = data.alerts || []; // Simpan alerts
@@ -1184,7 +1398,16 @@
                                 const riskScore = tx.fraudRiskScore || 0; // Score 0-100
                                 const riskLevel = tx.fraudRiskLevel || 'LOW'; // HIGH/MEDIUM/LOW
                                 const riskClass = `risk-${riskLevel.toLowerCase()}`; // CSS class
-                                const reasons = tx.fraudReasons ? JSON.parse(tx.fraudReasons) : []; // Parse JSON reasons
+                                // Safely parse fraudReasons - bisa string JSON atau array
+                                let reasons = [];
+                                try {
+                                    reasons = Array.isArray(tx.fraudReasons) 
+                                        ? tx.fraudReasons 
+                                        : (tx.fraudReasons ? JSON.parse(tx.fraudReasons) : []);
+                                } catch (e) {
+                                    console.warn('Failed to parse fraudReasons:', e);
+                                    reasons = [];
+                                }
                                 
                                 // Return HTML untuk 1 baris transaksi
                                 return `
@@ -1204,6 +1427,8 @@
                                                 <strong>${riskScore.toFixed(1)}</strong>
                                             </span>
                                         </td>
+                                        <td>
+                                            <span class="risk-badge ${riskClass}">${riskLevel}</span>
                                         </td>
                                         <td>
                                             <div class="fraud-reasons-mini">
@@ -1269,7 +1494,7 @@
             // Konfirmasi sebelum block
             if (confirm(`Block user "${username}"? User tidak akan bisa melakukan transaksi.`)) {
                 // Kirim request ke backend
-                fetch('/api/block-user', {
+                fetch('/api/admin/block-user', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -1324,7 +1549,7 @@
             // Konfirmasi sebelum unblock
             if (confirm(`Unblock user "${username}"? User akan bisa melakukan transaksi kembali.`)) {
                 // Kirim request ke backend
-                fetch('/api/unblock-user', {
+                fetch('/api/admin/unblock-user', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -1376,7 +1601,7 @@
                 }
                 
                 // Kirim request update balance
-                fetch('/api/reset-balance', {
+                fetch('/api/admin/reset-balance', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -1418,7 +1643,7 @@
             // Konfirmasi bulk topup
             if (confirm(`Top-up Rp ${parseInt(amount).toLocaleString('id-ID')} untuk SEMUA user (${allUsers.length} users)?`)) {
                 // Kirim request bulk topup
-                fetch('/api/bulk-topup', {
+                fetch('/api/admin/bulk-topup', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -1451,13 +1676,14 @@
             // Konfirmasi sebelum menghapus
             if (confirm('Clear semua fraud alerts? Ini akan menghapus history fraud detection.')) {
                 // Kirim request clear alerts
-                fetch('/api/clear-fraud-alerts', {
+                fetch('/api/admin/clear-fraud-alerts', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'x-app-key': 'NFC2025SecureApp',
                         'user-agent': 'okhttp/4.9.0'
-                    }
+                    },
+                    body: JSON.stringify({ password: 'admin123' })
                 })
                 .then(res => res.json())
                 .then(data => {
@@ -1495,7 +1721,7 @@
             try {
                 logActivity('system', '🔄 Loading NFC cards...', '#3498db');
                 
-                const response = await fetch('/api/nfc-cards', {
+                const response = await fetch('/api/nfc-cards/list', {
                     headers: {
                         'x-app-key': 'NFC2025SecureApp',
                         'user-agent': 'okhttp/4.9.0'

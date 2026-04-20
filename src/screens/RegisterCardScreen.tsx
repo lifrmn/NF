@@ -1,10 +1,106 @@
+// src/screens/RegisterCardScreen.tsx
+/* ==================================================================================
+ * 📇 SCREEN: RegisterCardScreen
+ * ==================================================================================
+ * 
+ * Purpose:
+ * NFC card registration screen untuk link physical NFC card ke user account.
+ * User scan NTag215 card, system validate, dan register ke database.
+ * 
+ * User Flow:
+ * ┌────────────────────────────────────────────────────────────────────┐
+ * │ DashboardScreen → Tap "📇 Register Card" → RegisterCardScreen      │
+ * │                                                                     │
+ * │ Registration Flow:                                                  │
+ * │ 1. System check NFC supported                                      │
+ * │ 2. System check NFC enabled                                        │
+ * │ 3. User tap "Scan Kartu NFC" button                                │
+ * │ 4. User tap physical NTag215 card ke HP                            │
+ * │ 5. System read card UID                                            │
+ * │ 6. System check card status (registered or not)                    │
+ * │    - If already registered to THIS user: Show info alert           │
+ * │    - If already registered to OTHER user: Show error               │
+ * │    - If not registered (404): Proceed to register                  │
+ * │ 7. System register card: POST /api/nfc-cards/register              │
+ * │ 8. Success alert with card info                                    │
+ * │ 9. Navigate back to MyCardsScreen (if onSuccess callback)          │
+ * └────────────────────────────────────────────────────────────────────┘
+ * 
+ * Key Features:
+ * 
+ * 1. NFC Hardware Validation:
+ *    - Check device support NFC
+ *    - Check NFC enabled in settings
+ *    - Show alerts with instructions if disabled
+ *    - initializeNFC() on component mount
+ * 
+ * 2. Duplicate Card Prevention:
+ *    - Check card already registered (GET /api/nfc-cards/info/{cardId})
+ *    - If registered to THIS user: Show success message (allow re-register)
+ *    - If registered to OTHER user: Block registration
+ *    - 1 card per user policy enforcement
+ * 
+ * 3. Card Validation:
+ *    - Read physical card UID (NFCService.readPhysicalCard)
+ *    - NTag215 card type required (13.56 MHz)
+ *    - Handle card read errors gracefully
+ * 
+ * 4. Registration States:
+ *    - 'idle': Initial state
+ *    - 'scanning': Reading physical card
+ *    - 'registering': Sending to backend
+ *    - 'success': Registration succeeded
+ *    - 'error': Registration failed
+ * 
+ * 5. Alert Messages:
+ *    - Predefined ALERTS constant dengan consistent messaging
+ *    - nfcDisabled: Instructions untuk enable NFC
+ *    - nfcNotSupported: Device tidak support NFC
+ *    - cardAlreadyRegistered: Card info (status, balance)
+ *    - cardAlreadyUsed: Block registration (card owned by other user)
+ *    - registerSuccess: Success message dengan card ID
+ * 
+ * API Endpoints Used:
+ * - GET /api/nfc-cards/info/{cardId}: Check card registration status
+ * - POST /api/nfc-cards/register: Register new card
+ *   Request: { cardId, userId, balance: 0, deviceId }
+ *   Response: { success, card: { id, cardId, userId, balance, cardStatus } }
+ * 
+ * State Management:
+ * - nfcSupported: Boolean device support NFC
+ * - nfcEnabled: Boolean NFC enabled in settings
+ * - loading: Boolean untuk button loading state
+ * - scanning: Boolean untuk scan animation
+ * - scannedCardId: String last scanned card UID
+ * - registrationStatus: Enum registration state
+ * 
+ * Props:
+ * - user: Current user object (id, deviceId)
+ * - onBack: Callback untuk navigate back
+ * - onSuccess: Optional callback after successful registration
+ * 
+ * ==================================================================================
+ */
+
 import React, { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { NFCService } from '../utils/nfc';
 import { apiService } from '../utils/apiService';
 
-// Alert Messages Constants
+/* ==================================================================================
+ * CONSTANTS: Alert Messages
+ * ==================================================================================
+ * Predefined alert messages untuk consistent user feedback.
+ * 
+ * Messages:
+ * - nfcDisabled: Instructions untuk enable NFC di settings
+ * - nfcNotSupported: Error message untuk device tanpa NFC
+ * - cardAlreadyRegistered: Success message dengan card info
+ * - cardAlreadyUsed: Error message untuk duplicate card (owned by other user)
+ * - registerSuccess: Success message dengan registration confirmation
+ * ==================================================================================
+ */
 const ALERTS = {
   nfcDisabled: {
     title: '📱 NFC Tidak Aktif',
@@ -27,19 +123,54 @@ const ALERTS = {
     message: `Kartu NFC Anda telah terdaftar dan siap digunakan.\n\nCard ID: ${cardId.slice(0, 12)}...\nBalance: Rp 0\n\nAnda dapat top-up saldo melalui admin atau menggunakan kartu untuk transaksi.`
   })
 };
-
-interface RegisterCardScreenProps {
+/* ==================================================================================
+ * TYPE DEFINITIONS
+ * ==================================================================================
+ * RegisterCardScreenProps:
+ * - user: Current user object (id, deviceId for tracking)
+ * - onBack: Callback untuk navigate back to previous screen
+ * - onSuccess: Optional callback after successful card registration
+ *   Called after user taps OK di success alert
+ * ==================================================================================
+ */interface RegisterCardScreenProps {
   user: any;
   onBack: () => void;
   onSuccess?: () => void;
 }
 
+/* ==================================================================================
+ * COMPONENT: RegisterCardScreen
+ * ==================================================================================
+ * NFC card registration screen dengan hardware validation dan duplicate prevention.
+ * 
+ * PARAMS:
+ * @param user - Current user object
+ * @param onBack - Navigate back callback
+ * @param onSuccess - Optional success callback
+ * ==================================================================================
+ */
 export default function RegisterCardScreen({ user, onBack, onSuccess }: RegisterCardScreenProps) {
+  // STATE 1: nfcSupported - Device has NFC hardware
   const [nfcSupported, setNfcSupported] = useState(false);
+  
+  // STATE 2: nfcEnabled - NFC is enabled in settings
   const [nfcEnabled, setNfcEnabled] = useState(false);
+  
+  // STATE 3: loading - Button loading state (disable during operation)
   const [loading, setLoading] = useState(false);
+  
+  // STATE 4: scanning - Show scan animation/feedback
   const [scanning, setScanning] = useState(false);
+  
+  // STATE 5: scannedCardId - Last scanned card UID
   const [scannedCardId, setScannedCardId] = useState<string>('');
+  
+  // STATE 6: registrationStatus - Current registration state
+  // 'idle': Initial/ready state
+  // 'scanning': Reading physical card
+  // 'registering': Validating and registering to backend
+  // 'success': Registration succeeded
+  // 'error': Registration failed
   const [registrationStatus, setRegistrationStatus] = useState<'idle' | 'scanning' | 'registering' | 'success' | 'error'>('idle');
 
   useEffect(() => {

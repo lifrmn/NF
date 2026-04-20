@@ -1,7 +1,103 @@
-// Dashboard Screen - Layar utama aplikasi NFC Payment
-// Menampilkan: saldo, status koneksi backend, menu NFC payment, dan riwayat transaksi
+// src/screens/DashboardScreen.tsx
+/* ==================================================================================
+ * 🏠 SCREEN: DashboardScreen
+ * ==================================================================================
+ * 
+ * Purpose:
+ * Main home screen aplikasi NFC Payment setelah user login.
+ * Hub pusat untuk: display balance, navigate to features, view transaction history.
+ * 
+ * User Flow:
+ * ┌────────────────────────────────────────────────────────────────────┐
+ * │ LOGIN SUCCESS → DashboardScreen                                    │
+ * │                                                                     │
+ * │ Screen Features:                                                    │
+ * │ 1. Header: Greeting + Logout button                                │
+ * │ 2. Balance Card: Current balance + sync status                     │
+ * │ 3. Action Buttons:                                                  │
+ * │    - 💳 NFC Payment (merchant receive payment)                     │
+ * │    - 📇 Register Card (link new NFC card)                          │
+ * │    - 🎴 My Cards (manage existing cards)                           │
+ * │ 4. Transaction History: Recent transactions (scrollable)            │
+ * │                                                                     │
+ * │ Navigation Options:                                                 │
+ * │ - Tap "💳 NFC Payment" → NFCScreen                                 │
+ * │ - Tap "📇 Register Card" → RegisterCardScreen                      │
+ * │ - Tap "🎴 My Cards" → MyCardsScreen                                │
+ * │ - Tap "Logout" → LoginScreen                                       │
+ * └────────────────────────────────────────────────────────────────────┘
+ * 
+ * Key Features:
+ * 
+ * 1. Auto-Refresh Balance:
+ *    - useFocusEffect: Refresh balance setiap screen focused
+ *    - syncBalanceFromBackend: Sync dari backend API
+ *    - Fallback to SQLite: Jika backend offline
+ * 
+ * 2. Pull-to-Refresh:
+ *    - Swipe down untuk manual refresh
+ *    - RefreshControl component
+ *    - Load user data + transactions
+ * 
+ * 3. Backend Health Check:
+ *    - Auto-check setiap 90 detik
+ *    - Rate limit handling (prevent spam)
+ *    - Show connection status (connected/offline)
+ * 
+ * 4. Transaction History:
+ *    - Display 10 recent transactions
+ *    - Color coding: Green (received), Red (sent)
+ *    - Relative time display (e.g., "2 jam yang lalu")
+ *    - Empty state: "Belum ada transaksi"
+ * 
+ * 5. Hybrid Data Source:
+ *    - Primary: SQLite cache (fast, offline-first)
+ *    - Secondary: Backend API (sync latest data)
+ *    - Strategy: Cache-first, background sync
+ * 
+ * State Management:
+ * - currentUser: Latest user data dari database
+ * - transactions: Array of recent transactions
+ * - loading: Boolean untuk RefreshControl
+ * - backendStatus: String status message
+ * - connectionStatus: 'connecting' | 'connected' | 'offline'
+ * - lastSyncTime: Date last successful sync
+ * - syncStatus: 'success' | 'failed' | 'never'
+ * 
+ * Props:
+ * - user: Current user object (from App.tsx)
+ * - onLogout: Callback untuk logout
+ * - onNavigateToNFC: Navigate ke NFCScreen
+ * - onNavigateToRegisterCard: Navigate ke RegisterCardScreen
+ * - onNavigateToMyCards: Navigate ke MyCardsScreen
+ * 
+ * ==================================================================================
+ */
 
 import React, { useState, useEffect } from 'react';
+
+/* ==================================================================================
+ * IMPORTS
+ * ==================================================================================
+ * React Navigation:
+ * - useFocusEffect: Hook untuk run code setiap screen focused
+ *   Use case: Auto-refresh balance saat user kembali ke dashboard
+ * 
+ * React Native Core:
+ * - View, Text, TouchableOpacity: Basic UI components
+ * - ScrollView: Scrollable container untuk transaction history
+ * - Alert: Confirmation dialogs (e.g., logout confirmation)
+ * - RefreshControl: Pull-to-refresh functionality
+ * - SafeAreaView: Respect device safe area (notch, status bar)
+ * 
+ * AsyncStorage:
+ * - Persistent storage untuk token dan user session
+ * 
+ * Utils:
+ * - database.ts: SQLite functions (getUserById, getUserTransactions, syncBalanceFromBackend)
+ * - apiService.ts: HTTP client untuk backend API
+ * ==================================================================================
+ */
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -9,6 +105,17 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getUserById, getUserTransactions, syncBalanceFromBackend } from '../utils/database';
 import { apiService } from '../utils/apiService';
 
+/* ==================================================================================
+ * TYPE DEFINITIONS
+ * ==================================================================================
+ * DashboardScreenProps:
+ * - user: Current logged-in user object (id, name, username, balance)
+ * - onLogout: Callback function untuk logout (clear session, navigate to LoginScreen)
+ * - onNavigateToNFC: Navigate to NFCScreen untuk merchant payment
+ * - onNavigateToRegisterCard: Optional callback untuk RegisterCardScreen
+ * - onNavigateToMyCards: Optional callback untuk MyCardsScreen
+ * ==================================================================================
+ */
 interface DashboardScreenProps {
   user: any;
   onLogout: () => void;
@@ -17,20 +124,91 @@ interface DashboardScreenProps {
   onNavigateToMyCards?: () => void;
 }
 
+/* ==================================================================================
+ * COMPONENT: DashboardScreen
+ * ==================================================================================
+ * Main home screen dengan balance display, action buttons, dan transaction history.
+ * 
+ * PARAMS:
+ * @param user - Current user object
+ * @param onLogout - Logout callback
+ * @param onNavigateToNFC - Navigate to NFC payment screen
+ * @param onNavigateToRegisterCard - Navigate to register card screen
+ * @param onNavigateToMyCards - Navigate to my cards screen
+ * ==================================================================================
+ */
 export default function DashboardScreen({ user, onLogout, onNavigateToNFC, onNavigateToRegisterCard, onNavigateToMyCards }: DashboardScreenProps) {
   
-  // State: currentUser (data terbaru), transactions (riwayat), loading (refresh status)
+  /* ================================================================================
+   * STATE MANAGEMENT (7 states)
+   * ================================================================================
+   */
+  
+  // STATE 1: currentUser
+  // Latest user data dari database (includes updated balance)
+  // Initial: user dari props (could be stale)
+  // Updated: After refreshData() call
   const [currentUser, setCurrentUser] = useState(user || null);
+  
+  // STATE 2: transactions
+  // Array of user transactions (recent 10)
+  // Initial: empty array
+  // Updated: After getUserTransactions() call
   const [transactions, setTransactions] = useState<any[]>([]);
+  
+  // STATE 3: loading
+  // Boolean flag untuk RefreshControl (pull-to-refresh animation)
+  // true: Show spinner while refreshing
+  // false: Hide spinner
   const [loading, setLoading] = useState(false);
   
-  // State koneksi backend: backendStatus (teks), connectionStatus (connecting/connected/offline)
+  // STATE 4: backendStatus
+  // String message untuk backend connection status
+  // Values: "Connecting...", "Backend Online ✅", "Backend Offline ❌", etc.
   const [backendStatus, setBackendStatus] = useState('Connecting...');
+  
+  // STATE 5: connectionStatus
+  // Enum untuk connection state
+  // 'connecting': Initial state, checking backend
+  // 'connected': Backend reachable
+  // 'offline': Backend tidak reachable
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'offline'>('connecting');
+  
+  // STATE 6: lastSyncTime
+  // Timestamp last successful balance sync
+  // null: Never synced
+  // Date: Last sync time (displayed as relative time)
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  
+  // STATE 7: syncStatus
+  // Result of last sync attempt
+  // 'never': No sync attempted yet
+  // 'success': Last sync succeeded
+  // 'failed': Last sync failed
   const [syncStatus, setSyncStatus] = useState<'success' | 'failed' | 'never'>('never');
 
-  // refreshData: Reload user data dan transaksi dari database + sync balance dari backend
+  /* ================================================================================
+   * FUNCTION: refreshData
+   * ================================================================================
+   * Reload user data dan transactions dari database + sync balance dari backend.
+   * 
+   * FLOW:
+   * 1. Load user data dari SQLite (fast, cache-first)
+   * 2. Load transactions dari SQLite
+   * 3. Sync balance dari backend (background update)
+   * 4. Handle sync success/fail status
+   * 
+   * Why Cache-First Strategy?
+   * - SQLite read sangat cepat (~1ms)
+   * - Backend API bisa lambat atau offline
+   * - Better UX: Show cached data immediately, update in background
+   * 
+   * Called By:
+   * - Pull-to-refresh (RefreshControl)
+   * - useFocusEffect (screen focus)
+   * - useEffect (component mount)
+   * ================================================================================
+   */
   const refreshData = async () => {
     if (!user || !user.id) {
       console.log('⚠️ No valid user for refresh data');

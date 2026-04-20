@@ -1,3 +1,111 @@
+// App.tsx
+/* ==================================================================================
+ * 🎉 MAIN APPLICATION ENTRY POINT
+ * ==================================================================================
+ * 
+ * Purpose:
+ * Root component untuk NFC Payment System mobile app.
+ * Handle navigation, authentication, initialization, dan session management.
+ * Main orchestrator untuk seluruh aplikasi.
+ * 
+ * Application Flow:
+ * ┌────────────────────────────────────────────────────────────────────┐
+ * │ APP STARTUP SEQUENCE                                                │
+ * │                                                                     │
+ * │ 1. Show Loading Screen (⏳ loading state)                          │
+ * │ 2. Initialize Database (SQLite init)                               │
+ * │ 3. Initialize Backend API (restore token, base URL)                │
+ * │ 4. Health Check Backend (optional, non-blocking)                   │
+ * │ 5. Register Device (track device ID)                               │
+ * │ 6. Check Auth State (restore session from AsyncStorage)            │
+ * │ 7. Determine Initial Screen:                                        │
+ * │    - If authenticated → Dashboard                                  │
+ * │    - If not authenticated → Login                                  │
+ * │                                                                     │
+ * │ Timeout Protection:                                                 │
+ * │ - Force to login screen after 20 seconds if stuck loading          │
+ * └────────────────────────────────────────────────────────────────────┘
+ * 
+ * Navigation Structure:
+ * ┌────────────────────────────────────────────────────────────────────┐
+ * │                       SCREEN NAVIGATION                            │
+ * ├────────────────────────────────────────────────────────────────────┤
+ * │                                                                     │
+ * │  LoginScreen ↔ RegisterScreen                                    │
+ * │       ↓                                                            │
+ * │  DashboardScreen (main hub)                                        │
+ * │       ├─→ NFCScreen (merchant payment)                          │
+ * │       ├─→ RegisterCardScreen (link NFC card)                    │
+ * │       └─→ MyCardsScreen (card management)                       │
+ * │                                                                     │
+ * └────────────────────────────────────────────────────────────────────┘
+ * 
+ * Key Features:
+ * 
+ * 1. Stack Navigation:
+ *    - React Navigation Stack Navigator
+ *    - No header (custom headers per screen)
+ *    - Gesture navigation enabled
+ *    - Animation enabled for smooth transitions
+ * 
+ * 2. Authentication State Management:
+ *    - 3 states: 'loading' | 'signedIn' | 'signedOut'
+ *    - Persistent session via AsyncStorage
+ *    - Auto-restore session on app launch
+ *    - Clean logout with session clear
+ * 
+ * 3. Initialization Sequence:
+ *    - Database initialization (SQLite)
+ *    - Backend API setup (restore token)
+ *    - Health check (non-blocking)
+ *    - Device registration
+ *    - Auth state check
+ * 
+ * 4. App State Management:
+ *    - Listen to app state changes (active/background)
+ *    - Auto-sync device status when app becomes active
+ *    - NFC cleanup on app pause
+ * 
+ * 5. Error Handling:
+ *    - Timeout protection (20s max loading)
+ *    - Error screen with retry option
+ *    - Non-blocking initialization (continue on backend offline)
+ * 
+ * 6. Device Tracking:
+ *    - Unique device ID generation
+ *    - Platform detection (Android/iOS)
+ *    - Device registration to admin system
+ *    - Track app version
+ * 
+ * State Variables:
+ * - authState: Current auth state (loading/signedIn/signedOut)
+ * - currentUser: Logged-in user object (null if not authenticated)
+ * - error: Error message string (null if no error)
+ * - navigationRef: React Navigation ref untuk programmatic navigation
+ * 
+ * Key Methods:
+ * - initializeApp(): Main initialization sequence
+ * - checkAuthState(): Restore session from AsyncStorage
+ * - handleLogin(): Process login success
+ * - handleLogout(): Clear session and navigate to login
+ * - navigateToScreen(): Programmatic navigation helper
+ * - handleAppStateChange(): Sync device status on app resume
+ * 
+ * TypeScript Types:
+ * - RootStackParamList: Navigation screen params
+ * - AuthState: 'loading' | 'signedIn' | 'signedOut'
+ * - AppScreen: Screen name enum
+ * - AppUser: User object interface
+ * 
+ * Dependencies:
+ * - React Navigation: Navigation framework
+ * - AsyncStorage: Persistent storage
+ * - Expo: Mobile app framework
+ * - SafeAreaProvider: Handle device safe areas (notch, status bar)
+ * 
+ * ==================================================================================
+ */
+
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer, NavigationContainerRef } from '@react-navigation/native';
@@ -14,7 +122,12 @@ import {
 } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 
-// ==================== Screens ====================
+/* ==================================================================================
+ * IMPORTS: Screens
+ * ==================================================================================
+ * All screen components untuk navigation stack.
+ * ==================================================================================
+ */
 import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 import DashboardScreen from './src/screens/DashboardScreen';
@@ -22,13 +135,30 @@ import NFCScreen from './src/screens/NFCScreen';
 import RegisterCardScreen from './src/screens/RegisterCardScreen';
 import MyCardsScreen from './src/screens/MyCardsScreen';
 
-// ==================== Utils ====================
+/* ==================================================================================
+ * IMPORTS: Utils
+ * ==================================================================================
+ * Utility functions untuk database, NFC, dan API operations.
+ * ==================================================================================
+ */
 import { getUserById, initDatabase } from './src/utils/database';
 import { NFCService } from './src/utils/nfc';
 import { apiService } from './src/utils/apiService';
-// Unified API service for all backend communication
 
-// ==================== Navigation Types ====================
+/* ==================================================================================
+ * TYPE DEFINITIONS: Navigation
+ * ==================================================================================
+ * TypeScript types untuk React Navigation.
+ * 
+ * RootStackParamList:
+ * - Defines all screens in navigation stack
+ * - Each screen key with undefined = no params required
+ * 
+ * NavigationProp:
+ * - Type for navigation prop passed to screens
+ * - Used for type-safe navigation calls
+ * ==================================================================================
+ */
 export type RootStackParamList = {
   Login: undefined;
   Register: undefined;
@@ -41,7 +171,24 @@ export type RootStackParamList = {
 export type NavigationProp = StackNavigationProp<RootStackParamList>;
 const Stack = createStackNavigator<RootStackParamList>();
 
-// ==================== Types ====================
+/* ==================================================================================
+ * TYPE DEFINITIONS: Application
+ * ==================================================================================
+ * AuthState: 3 possible authentication states
+ * - 'loading': Initial state, checking session
+ * - 'signedIn': User authenticated, show Dashboard
+ * - 'signedOut': No session, show Login
+ * 
+ * AppScreen: Screen name enum untuk programmatic navigation
+ * 
+ * AppUser: User object structure
+ * - id: Database primary key
+ * - name: Full name
+ * - username: Unique username
+ * - balance: Current balance in Rupiah
+ * - email: Optional email (generated from username)
+ * ==================================================================================
+ */
 type AuthState = 'loading' | 'signedIn' | 'signedOut';
 type AppScreen = 'login' | 'register' | 'dashboard' | 'nfc' | 'registerCard' | 'myCards';
 
@@ -53,8 +200,29 @@ interface AppUser {
   email?: string;
 }
 
-// ==================== MAIN APP ====================
+/* ==================================================================================
+ * COMPONENT: App
+ * ==================================================================================
+ * Main application component - entry point untuk entire app.
+ * 
+ * Responsibilities:
+ * 1. Initialize database dan backend API
+ * 2. Restore authentication session
+ * 3. Setup navigation stack
+ * 4. Handle app state changes
+ * 5. Manage user authentication flow
+ * ==================================================================================
+ */
 export default function App() {
+  /* ================================================================================
+   * STATE MANAGEMENT
+   * ================================================================================
+   * authState: Current authentication state
+   * currentUser: Logged-in user data (null if not authenticated)
+   * error: Error message for error screen
+   * navigationRef: Ref untuk programmatic navigation
+   * ================================================================================
+   */
   const [authState, setAuthState] = useState<AuthState>('loading');
   const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -62,9 +230,20 @@ export default function App() {
 
   console.log('🚀 App.tsx rendered, authState:', authState);
 
-  // ========================================================
-  // Initialization
-  // ========================================================
+  /* ================================================================================
+   * EFFECT: App Initialization
+   * ================================================================================
+   * Run once on app mount.
+   * 
+   * FLOW:
+   * 1. Set force login timeout (20s safety)
+   * 2. Call initializeApp() - main initialization sequence
+   * 3. Setup app state listener (active/background detection)
+   * 4. Cleanup on unmount (clear timers, NFC cleanup)
+   * 
+   * Dependencies: [] = run once on mount
+   * ================================================================================
+   */
   useEffect(() => {
     // Set timeout untuk paksa ke login jika loading > 20 detik
     const forceLoginTimeout = setTimeout(() => {
@@ -84,6 +263,23 @@ export default function App() {
     };
   }, []);
 
+  /* ================================================================================
+   * FUNCTION: handleAppStateChange
+   * ================================================================================
+   * Called when app state changes (active, background, inactive).
+   * 
+   * FLOW:
+   * 1. Check if app becomes active (from background)
+   * 2. Sync device status to backend
+   * 3. Update device info (platform, version)
+   * 4. Include user data if authenticated
+   * 
+   * Use Case:
+   * - User switches back to app from background
+   * - Admin can track active devices
+   * - Keep device registry updated
+   * ================================================================================
+   */
   const handleAppStateChange = async (nextAppState: AppStateStatus) => {
     if (nextAppState === 'active') {
       console.log('📱 App aktif kembali, sync status device...');
@@ -113,6 +309,44 @@ export default function App() {
     }
   };
 
+  /* ================================================================================
+   * FUNCTION: initializeApp
+   * ================================================================================
+   * Main initialization sequence dengan 5 steps.
+   * 
+   * INITIALIZATION STEPS:
+   * 
+   * 1️⃣ Initialize Database (SQLite)
+   *    - Setup local database
+   *    - Create tables if not exist
+   *    - Timeout: 10s
+   * 
+   * 2️⃣ Initialize Backend API
+   *    - Restore auth token from AsyncStorage
+   *    - Setup base URL
+   *    - Timeout: 10s
+   * 
+   * 3️⃣ Connect to Backend (Health Check)
+   *    - Non-blocking (continue if offline)
+   *    - Timeout: 5s
+   *    - Fallback: Offline mode
+   * 
+   * 4️⃣ Register Device
+   *    - Get or generate device ID
+   *    - Send device info to admin system
+   *    - Non-blocking (continue if failed)
+   *    - Timeout: 3s
+   * 
+   * 5️⃣ Check Auth State
+   *    - Restore session from AsyncStorage
+   *    - Determine initial screen (Login vs Dashboard)
+   * 
+   * Error Handling:
+   * - Steps 1-2: Critical (must succeed)
+   * - Steps 3-4: Non-blocking (continue on failure)
+   * - Step 5: Always runs (fallback to signedOut)
+   * ================================================================================
+   */
   const initializeApp = async () => {
     try {
       setError(null);
@@ -185,9 +419,22 @@ export default function App() {
     }
   };
 
-  // ========================================================
-  // Authentication Handling
-  // ========================================================
+  /* ================================================================================
+   * FUNCTION: checkAuthState
+   * ================================================================================
+   * Restore authentication session dari AsyncStorage.
+   * 
+   * FLOW:
+   * 1. Get userId from AsyncStorage
+   * 2. If exists, load user data from database
+   * 3. If user found, set currentUser and authState = 'signedIn'
+   * 4. If not found, set authState = 'signedOut'
+   * 
+   * Result:
+   * - Success: Navigate to Dashboard
+   * - Failure: Navigate to Login
+   * ================================================================================
+   */
   const checkAuthState = async () => {
     try {
       const storedUserId = await AsyncStorage.getItem('userId');
@@ -214,6 +461,26 @@ export default function App() {
     }
   };
 
+  /* ================================================================================
+   * FUNCTION: handleLogin
+   * ================================================================================
+   * Process successful login.
+   * 
+   * PARAMS:
+   * @param userData - User data dari LoginScreen
+   * 
+   * FLOW:
+   * 1. Create AppUser object dengan email generated
+   * 2. Save userId to AsyncStorage (persistent session)
+   * 3. Set currentUser state
+   * 4. Set authState = 'signedIn'
+   * 5. Navigate to Dashboard (reset navigation stack)
+   * 
+   * Navigation:
+   * - Use reset() untuk clear login screen dari stack
+   * - User can't go back to login with back button
+   * ================================================================================
+   */
   const handleLogin = async (userData: {
     id: number;
     name: string;
@@ -243,6 +510,24 @@ export default function App() {
     }
   };
 
+  /* ================================================================================
+   * FUNCTION: handleLogout
+   * ================================================================================
+   * Process user logout.
+   * 
+   * FLOW:
+   * 1. Remove userId from AsyncStorage (clear session)
+   * 2. Clear currentUser state
+   * 3. Set authState = 'signedOut'
+   * 4. Cleanup NFC resources
+   * 5. Navigate to Login (reset navigation stack)
+   * 
+   * Security:
+   * - Clear all persistent data
+   * - Release hardware resources (NFC)
+   * - Reset navigation to prevent back navigation
+   * ================================================================================
+   */
   const handleLogout = async () => {
     try {
       await AsyncStorage.removeItem('userId');
@@ -261,9 +546,32 @@ export default function App() {
     }
   };
 
-  // ========================================================
-  // Navigation Shortcuts
-  // ========================================================
+  /* ================================================================================
+   * FUNCTION: navigateToScreen
+   * ================================================================================
+   * Programmatic navigation helper.
+   * 
+   * PARAMS:
+   * @param screen - Target screen name (lowercase enum)
+   * 
+   * FLOW:
+   * 1. Check navigationRef available
+   * 2. Map screen name to Navigation screen key
+   * 3. Call navigate() with screen key
+   * 4. Log success/error
+   * 
+   * Screen Mapping:
+   * - 'login' → 'Login'
+   * - 'register' → 'Register'
+   * - 'dashboard' → 'Dashboard'
+   * - 'nfc' → 'NFC'
+   * - 'registerCard' → 'RegisterCard'
+   * - 'myCards' → 'MyCards'
+   * 
+   * Called By:
+   * - Screen components via props (onBack, onNavigate*)
+   * ================================================================================
+   */
   const navigateToScreen = useCallback((screen: AppScreen) => {
     if (!navigationRef.current) {
       console.error('❌ Navigation ref not available');
