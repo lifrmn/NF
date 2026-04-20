@@ -303,7 +303,7 @@ router.get('/verify', async (req, res) => {
     // STEP 2: Verify token menggunakan jwt.verify()
     let decoded; // Variable untuk menyimpan decoded payload
     try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET); // Verify & decode token
+      decoded = jwt.verify(token, process.env.JWT_SECRET || 'nfc-payment-jwt-secret-2025-ultra-secure-key'); // Verify & decode token
       // decoded = { userId: 123, username: 'john', iat: 1234567890, exp: 1234571490 }
     } catch (err) {
       // Token invalid (signature salah, expired, dll)

@@ -400,6 +400,12 @@ export class NFCService {
     } catch (error) {
       console.log('NFC Scanning Error:', error);
       
+      // Cleanup: Clear interval jika ada error untuk prevent memory leak
+      if ((this as any)._scanInterval) {
+        clearInterval((this as any)._scanInterval);
+        (this as any)._scanInterval = null;
+      }
+      
       // Kalau ada error callback, panggil
       if (onError) onError(error);
     }

@@ -87,7 +87,38 @@ const formatCurrency = (amount) => {
   return `Rp ${amount.toLocaleString('id-ID')}`; // Locale Indonesia untuk format Rupiah
 };
 
-// ============================================================================\n// ============================================================================\n// FRAUD DETECTION: Statistical Anomaly Detection\n// ============================================================================\n// Method: Statistical Anomaly Detection (Machine Learning Approach)\n// Algorithm: Z-Score Based Anomaly Detection\n// Academic Reference: Chandola et al. (2009) - Anomaly Detection Survey\n//\n// Konsep:\n// - Fraud detection menggunakan statistical anomaly detection\n// - Transaksi dianggap fraud jika nilainya jauh berbeda dari pola normal user\n// - Menggunakan Z-Score untuk mengukur seberapa \"abnormal\" suatu transaksi\n// - Z-Score > 3 = Extreme outlier (block), Z-Score > 2 = Review, Z-Score ≤ 2 = Normal\n//\n// Cara Kerja:\n// 1. Load 20 transaksi terakhir user (historical data)\n// 2. Hitung mean (rata-rata) dan standard deviation (σ)\n// 3. Hitung Z-Score transaksi sekarang: Z = (X - μ) / σ\n// 4. Klasifikasi risk berdasarkan Z-Score\n// 5. Return decision: ALLOW / REVIEW / BLOCK\n// ============================================================================\nconst analyzeFraudRisk = async (senderCard, amount, deviceId, prisma) => {\n  // SPECIAL CASE: Jika card tidak link ke user, skip fraud check\n  // (Card tanpa user tidak punya historical data untuk comparison)\n  if (!senderCard.userId) {\n    return { \n      riskScore: 0, // Risk score = 0 (low risk)\n      decision: 'ALLOW', // Izinkan transaksi\n      riskLevel: 'LOW', // Risk level rendah\n      riskFactors: ['No user data - skipping fraud check'] // Alasan skip\n    };\n  }
+// ============================================================================
+// ============================================================================
+// FRAUD DETECTION: Statistical Anomaly Detection
+// ============================================================================
+// Method: Statistical Anomaly Detection (Machine Learning Approach)
+// Algorithm: Z-Score Based Anomaly Detection
+// Academic Reference: Chandola et al. (2009) - Anomaly Detection Survey
+//
+// Konsep:
+// - Fraud detection menggunakan statistical anomaly detection
+// - Transaksi dianggap fraud jika nilainya jauh berbeda dari pola normal user
+// - Menggunakan Z-Score untuk mengukur seberapa "abnormal" suatu transaksi
+// - Z-Score > 3 = Extreme outlier (block), Z-Score > 2 = Review, Z-Score ≤ 2 = Normal
+//
+// Cara Kerja:
+// 1. Load 20 transaksi terakhir user (historical data)
+// 2. Hitung mean (rata-rata) dan standard deviation (σ)
+// 3. Hitung Z-Score transaksi sekarang: Z = (X - μ) / σ
+// 4. Klasifikasi risk berdasarkan Z-Score
+// 5. Return decision: ALLOW / REVIEW / BLOCK
+// ============================================================================
+const analyzeFraudRisk = async (senderCard, amount, deviceId, prisma) => {
+  // SPECIAL CASE: Jika card tidak link ke user, skip fraud check
+  // (Card tanpa user tidak punya historical data untuk comparison)
+  if (!senderCard.userId) {
+    return { 
+      riskScore: 0, // Risk score = 0 (low risk)
+      decision: 'ALLOW', // Izinkan transaksi
+      riskLevel: 'LOW', // Risk level rendah
+      riskFactors: ['No user data - skipping fraud check'] // Alasan skip
+    };
+  }
 
   try {
     // Load historical transaction data (last 20 transactions)
@@ -767,7 +798,7 @@ router.post('/payment', async (req, res) => {
 
     // STEP 2: Parse & validate amount (must be positive number)
     const amountNum = parseFloat(amount);
-    if (amountNum <= 0) {
+    if (!amountNum || isNaN(amountNum) || amountNum <= 0) {
       return res.status(400).json({ error: 'Invalid amount' });
     }
 
@@ -834,28 +865,34 @@ router.post('/payment', async (req, res) => {
         // STEP 6a: Create fraud alert untuk kasus REVIEW dan BLOCK
         // Alert ini akan muncul di admin dashboard untuk manual investigation
         if (fraudAnalysis.decision === 'REVIEW' || fraudAnalysis.decision === 'BLOCK') {
-          await prisma.fraudAlert.create({
-            data: {
-              userId: senderCard.userId,
-              deviceId,
-              deviceName: 'NFC Card Reader',
-              riskScore: fraudAnalysis.riskScore,  // 50 (REVIEW) atau 100 (BLOCK)
-              riskLevel: fraudAnalysis.riskLevel,  // MEDIUM atau HIGH
-              decision: fraudAnalysis.decision,     // REVIEW atau BLOCK
-              reasons: JSON.stringify(fraudAnalysis.riskFactors),  // Array of reasons
-              confidence: fraudAnalysis.riskScore === 100 ? 0.997 : 0.95,  // 3σ = 99.7%, 2σ = 95%
-              riskFactors: JSON.stringify({
-                cardId: cardId.slice(0, 8) + '...',
-                amount: amountNum,
-                zScore: fraudAnalysis.zScore,
-                avgAmount: fraudAnalysis.avgAmount,
-                stdDev: fraudAnalysis.stdDev,
-                historicalTransactions: 15  // Based on last 15 transactions
-              }),
-              ipAddress: req.ip  // Track IP untuk investigation
-            }
-          });
-          console.log(`🚨 Fraud Alert Created: Risk ${fraudAnalysis.riskScore} → ${fraudAnalysis.decision}`);
+          try {
+            await prisma.fraudAlert.create({
+              data: {
+                userId: senderCard.userId,
+                deviceId,
+                deviceName: 'NFC Card Reader',
+                riskScore: fraudAnalysis.riskScore,  // 50 (REVIEW) atau 100 (BLOCK)
+                riskLevel: fraudAnalysis.riskLevel,  // MEDIUM atau HIGH
+                decision: fraudAnalysis.decision,     // REVIEW atau BLOCK
+                reasons: JSON.stringify(fraudAnalysis.riskFactors),  // Array of reasons
+                confidence: fraudAnalysis.riskScore === 100 ? 0.997 : 0.95,  // 3σ = 99.7%, 2σ = 95%
+                riskFactors: JSON.stringify({
+                  cardId: cardId.slice(0, 8) + '...',
+                  amount: amountNum,
+                  zScore: fraudAnalysis.zScore,
+                  avgAmount: fraudAnalysis.avgAmount,
+                  stdDev: fraudAnalysis.stdDev,
+                  historicalTransactions: 20  // Based on last 20 transactions
+                }),
+                ipAddress: req.ip  // Track IP untuk investigation
+              }
+            });
+            console.log(`🚨 Fraud Alert Created: Risk ${fraudAnalysis.riskScore} → ${fraudAnalysis.decision}`);
+          } catch (alertError) {
+            // Log error tapi jangan stop transaction process (fail-safe)
+            // Alert creation failure tidak boleh mengganggu payment flow
+            console.error('⚠️ Failed to create fraud alert (non-critical):', alertError.message);
+          }
         }
 
         // STEP 6b: If BLOCK decision → Reject transaction immediately
@@ -994,7 +1031,6 @@ router.post('/payment', async (req, res) => {
 
         // Update receiver CARD - sync balance dengan user + update lastUsed
         updatedReceiverCard = await tx.nFCCard.update({
-        updatedReceiverCard = await tx.nFCCard.update({
           where: { cardId: receiverCardId },
           data: { 
             lastUsed: new Date(),                      // Track last activity
@@ -1052,14 +1088,6 @@ router.post('/payment', async (req, res) => {
             metadata: JSON.stringify({
               description,
               sender: cardId,              // Sender card UID
-              timestamp: new Date().toISOString()
-            }),
-            ipAddress: req.ip
-          }
-        });
-      }
-      // Jika user-to-user transfer: no receiver card log (receiver tidak pakai card)
-              sender: cardId,
               timestamp: new Date().toISOString()
             }),
             ipAddress: req.ip
@@ -1172,7 +1200,7 @@ router.post('/topup', async (req, res) => {
 
     // STEP 3: Parse & validate amount
     const amountNum = parseFloat(amount);
-    if (amountNum <= 0) return res.status(400).json({ error: 'Invalid amount' });
+    if (!amountNum || isNaN(amountNum) || amountNum <= 0) return res.status(400).json({ error: 'Invalid amount' });
 
     // STEP 4: Validate card exists
     const card = await prisma.nFCCard.findUnique({ where: { cardId } });
