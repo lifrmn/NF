@@ -46,7 +46,7 @@
  * 
  * 3. Amount Validation:
  *    - Must be number > 0
- *    - Minimum Rp 1.000 (prevent small amount spam)
+ *    - Tidak ada batasan minimum (fraud AI handle abnormal amounts)
  *    - Parse float untuk handle decimal input
  * 
  * 4. Real-time Balance Display:
@@ -305,8 +305,8 @@ export default function NFCScreen({ user, onBack }: NFCScreenProps) {
    * │ VALIDATION 2: Amount is valid number                                │
    * │               └─ parseFloat(amount) must be > 0                     │
    * ├─────────────────────────────────────────────────────────────────────┤
-   * │ VALIDATION 3: Amount minimum Rp 1.000                               │
-   * │               └─ Prevent small amount spam                          │
+   * │ VALIDATION 3: No minimum amount restriction                         │
+   * │               └─ Fraud AI will detect abnormal amounts             │
    * ├─────────────────────────────────────────────────────────────────────┤
    * │ PAYMENT PROCESSING                                                  │
    * │   └─ Call processTapToPayTransfer (from usePayment hook)           │
@@ -345,13 +345,9 @@ export default function NFCScreen({ user, onBack }: NFCScreenProps) {
       return; // Early return: invalid amount
     }
 
-    // VALIDATION 3: Minimum amount Rp 1.000
-    // Prevent spam dengan small amounts
-    // Security measure: Reduce transaction volume for fraud detection
-    if (amountNum < 1000) {
-      Alert.alert('Error', 'Minimal transfer Rp 1.000');
-      return; // Early return: amount too small
-    }
+    // VALIDATION 3: No minimum amount restriction
+    // Sekarang bisa transfer jumlah berapapun (Rp 1, Rp 100, Rp 19.456, dll)
+    // Fraud detection AI (20 transaksi historis) akan handle abnormal amounts
 
     // PAYMENT PROCESSING
     // Call processTapToPayTransfer dari usePayment hook
@@ -471,7 +467,7 @@ export default function NFCScreen({ user, onBack }: NFCScreenProps) {
    * 4. INPUT CARD:
    *    - Label: "💰 Jumlah Pembayaran:"
    *    - TextInput dengan numeric keyboard
-   *    - Hint: "Minimal Rp 1.000"
+   *    - Hint: "Masukkan jumlah (contoh: 19456)"
    *    - Controlled input: value={amount} onChangeText={setAmount}
    *    - Disabled saat isProcessing
    * 
@@ -541,8 +537,8 @@ export default function NFCScreen({ user, onBack }: NFCScreenProps) {
             editable={!isProcessing}
           />
           
-          {/* Hint text: minimum amount */}
-          <Text style={styles.inputHint}>Minimal Rp 1.000</Text>
+          {/* Hint text: flexible amount */}
+          <Text style={styles.inputHint}>Masukkan jumlah (contoh: 19456)</Text>
         </View>
 
         {/* ===== ACTION BUTTON: TERIMA PEMBAYARAN ===== */}
