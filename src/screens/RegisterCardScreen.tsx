@@ -150,28 +150,31 @@ const ALERTS = {
  * ==================================================================================
  */
 export default function RegisterCardScreen({ user, onBack, onSuccess }: RegisterCardScreenProps) {
-  // STATE 1: nfcSupported - Device has NFC hardware
-  const [nfcSupported, setNfcSupported] = useState(false);
+  // STATE 1: nfcSupported - Apakah device punya hardware NFC
+  // true = device support NFC, false = tidak support (tampilkan error)
+  const [nfcSupported, setNfcSupported] = useState(false); // Asumsi awal: tidak support
   
-  // STATE 2: nfcEnabled - NFC is enabled in settings
-  const [nfcEnabled, setNfcEnabled] = useState(false);
+  // STATE 2: nfcEnabled - Apakah NFC sudah diaktifkan di pengaturan device
+  // true = aktif, false = tidak aktif (tampilkan instruksi)
+  const [nfcEnabled, setNfcEnabled] = useState(false); // Asumsi awal: tidak aktif
   
-  // STATE 3: loading - Button loading state (disable during operation)
-  const [loading, setLoading] = useState(false);
+  // STATE 3: loading - Flag untuk disable tombol saat operasi berlangsung
+  // Mencegah user tap tombol berkali-kali
+  const [loading, setLoading] = useState(false); // Awalnya tidak loading
   
-  // STATE 4: scanning - Show scan animation/feedback
-  const [scanning, setScanning] = useState(false);
+  // STATE 4: scanning - Flag untuk menampilkan animasi scanning
+  // Memberikan feedback visual bahwa sistem sedang membaca kartu
+  const [scanning, setScanning] = useState(false); // Awalnya tidak scanning
   
-  // STATE 5: scannedCardId - Last scanned card UID
-  const [scannedCardId, setScannedCardId] = useState<string>('');
+  // STATE 5: scannedCardId - UID kartu terakhir yang berhasil di-scan
+  // Disimpan untuk keperluan debugging dan display
+  const [scannedCardId, setScannedCardId] = useState<string>(''); // Awalnya kosong
   
-  // STATE 6: registrationStatus - Current registration state
-  // 'idle': Initial/ready state
-  // 'scanning': Reading physical card
-  // 'registering': Validating and registering to backend
-  // 'success': Registration succeeded
-  // 'error': Registration failed
-  const [registrationStatus, setRegistrationStatus] = useState<'idle' | 'scanning' | 'registering' | 'success' | 'error'>('idle');
+  // STATE 6: registrationStatus - Status proses registrasi saat ini
+  // Digunakan untuk menentukan UI yang ditampilkan
+  // 'idle' = siap scan, 'scanning' = sedang baca kartu, 'registering' = kirim ke backend
+  // 'success' = berhasil, 'error' = gagal
+  const [registrationStatus, setRegistrationStatus] = useState<'idle' | 'scanning' | 'registering' | 'success' | 'error'>('idle'); // Awal: idle
 
   useEffect(() => {
     initializeNFC();

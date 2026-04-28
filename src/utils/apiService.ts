@@ -50,20 +50,17 @@ import { API_URL } from './configuration';
  * ==================================================================================
  */
 export class APIService {
-  // STEP 1: Deklarasi properties untuk Singleton Pattern
-  // private static instance: Menyimpan 1 instance tunggal class ini
-  private static instance: APIService;
+  // Property static untuk menyimpan satu instance tunggal (Singleton Pattern)
+  // Semua file yang memanggil getInstance() akan dapat instance yang sama
+  private static instance: APIService; // Hanya ada 1 instance di seluruh aplikasi
   
-  // STEP 2: Deklarasi properties untuk authentication
-  // token: JWT token dari backend (untuk validasi user di setiap request)
-  // userId: ID user yang sedang login (untuk tracking)
-  private token: string | null = null;
-  private userId: string | null = null;
+  // Property untuk autentikasi dan tracking user
+  private token: string | null = null; // JWT token dari backend, null jika belum login
+  private userId: string | null = null; // ID user yang login, null jika belum login
   
-  // STEP 3: Base URL untuk backend API (dari configuration.ts)
-  // Semua endpoint akan digabung dengan baseUrl ini
-  // Contoh: baseUrl + '/api/auth/login' = 'https://xyz.ngrok-free.dev/api/auth/login'
-  private baseUrl = API_URL;
+  // Base URL backend API dari file configuration.ts
+  // Semua endpoint akan digabung dengan URL ini
+  private baseUrl = API_URL; // Contoh: 'https://xyz.ngrok-free.dev'
 
   /* ================================================================================
    * METHOD: getInstance()
@@ -80,16 +77,15 @@ export class APIService {
    * ================================================================================
    */
   static getInstance(): APIService {
-    // STEP 1: Check apakah instance sudah dibuat sebelumnya
-    // Jika belum (undefined/null), buat instance baru
+    // Cek apakah instance sudah pernah dibuat sebelumnya
     if (!APIService.instance) {
-      APIService.instance = new APIService();
-      console.log('✅ APIService instance created (Singleton)');
+      // Jika belum ada, buat instance baru dengan constructor
+      APIService.instance = new APIService(); // Hanya dijalankan sekali di awal
+      console.log('✅ APIService instance created (Singleton)'); // Log pertama kali dibuat
     }
     
-    // STEP 2: Return instance yang sudah ada
-    // Instance ini shared oleh semua file yang memanggil getInstance()
-    return APIService.instance;
+    // Return instance yang sudah ada (shared across all files)
+    return APIService.instance; // Selalu return object yang sama
   }
 
   /* ================================================================================
@@ -111,31 +107,28 @@ export class APIService {
    */
   async initialize(): Promise<boolean> {
     try {
-      // STEP 1: Load token dari AsyncStorage
-      // AsyncStorage = persistent key-value storage di React Native
-      // Seperti localStorage di web, tapi async
-      // Token disimpan saat login berhasil (lihat method login() di bawah)
-      this.token = await AsyncStorage.getItem('token');
+      // STEP 1: Load JWT token dari AsyncStorage (penyimpanan lokal device)
+      // Token ini disimpan saat user login berhasil
+      // AsyncStorage.getItem() return Promise<string | null>
+      this.token = await AsyncStorage.getItem('token'); // Ambil token yang tersimpan
       
       // STEP 2: Load userId dari AsyncStorage
-      // userId digunakan untuk tracking user behavior dan fraud detection
-      this.userId = await AsyncStorage.getItem('userId');
+      // UserId dipakai untuk tracking dan fraud detection
+      this.userId = await AsyncStorage.getItem('userId'); // Ambil userId yang tersimpan
       
-      // STEP 3: Log untuk debugging
-      // Menampilkan apakah token loaded atau tidak
-      console.log('🔧 API Service initialized');
-      console.log('📡 Backend URL:', this.baseUrl);
-      console.log('🔑 Token loaded:', this.token ? 'Yes' : 'No'); // Jangan print token lengkap (security risk)
-      console.log('👤 User ID loaded:', this.userId || 'No user');
+      // STEP 3: Log hasil initialization untuk debugging
+      console.log('🔧 API Service initialized'); // Konfirmasi init berhasil
+      console.log('📡 Backend URL:', this.baseUrl); // Tampilkan URL backend
+      console.log('🔑 Token loaded:', this.token ? 'Yes' : 'No'); // Cek apakah ada token (jangan print token lengkap, security risk)
+      console.log('👤 User ID loaded:', this.userId || 'No user'); // Tampilkan userId atau "No user"
       
-      // STEP 4: Return success
-      return true;
+      // STEP 4: Return true untuk menandakan initialization berhasil
+      return true; // Always return true jika tidak ada error
       
     } catch (error) {
-      // STEP 5: Handle error jika AsyncStorage gagal
-      // Error ini jarang terjadi, biasanya karena permission device atau storage penuh
-      console.error('❌ API Service initialization failed:', error);
-      return false;
+      // Error handling jika AsyncStorage gagal (jarang terjadi)
+      console.error('❌ API Service initialization failed:', error); // Log error detail
+      return false; // Return false untuk menandakan gagal
     }
   }
 
@@ -164,137 +157,92 @@ export class APIService {
    * ================================================================================
    */
   private async makeRequest(endpoint: string, options: any = {}): Promise<any> {
-    // STEP 1: Build full URL dengan menggabungkan baseUrl + endpoint
-    // Contoh: 'https://xyz.ngrok-free.dev' + '/api/auth/login'
-    // Result: 'https://xyz.ngrok-free.dev/api/auth/login'
-    // 
-    // endpoint.startsWith('/') checks if endpoint already has / at the beginning
-    // Jika sudah ada /, langsung concat. Jika belum, tambahkan /.
-    const fullUrl = `${this.baseUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+    // STEP 1: Gabungkan base URL dengan endpoint untuk membuat URL lengkap
+    // Contoh: baseUrl='https://xyz.ngrok.io' + endpoint='/api/auth/login'
+    // Hasil: 'https://xyz.ngrok.io/api/auth/login'
+    // Cek apakah endpoint sudah dimulai dengan '/', jika belum tambahkan
+    const fullUrl = `${this.baseUrl}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`; // Build URL lengkap
     
     try {
-      // STEP 2: Setup Timeout dengan AbortController
-      // AbortController adalah Web API untuk membatalkan fetch request
-      // Kenapa perlu timeout?
-      // - Network lambat bisa membuat request hang selamanya
-      // - User experience buruk jika loading terlalu lama
-      // - 15 detik adalah balance antara slow network dan user patience
-      const controller = new AbortController();
+      // STEP 2: Setup timeout dengan AbortController agar request tidak hang selamanya
+      // AbortController = Web API untuk membatalkan fetch request yang sedang berjalan
+      const controller = new AbortController(); // Buat controller untuk kontrol request
       
-      // setTimeout akan trigger abort() setelah 15 detik (15000ms)
-      // Jika request belum selesai dalam 15 detik, auto dibatalkan
-      const timeout = setTimeout(() => controller.abort(), 15000);
+      // Set timeout 15 detik: jika request belum selesai, akan di-cancel otomatis
+      // 15000 ms = 15 detik, balance antara slow network dan user experience
+      const timeout = setTimeout(() => controller.abort(), 15000); // Auto-cancel setelah 15 detik
       
-      // STEP 3: Build request configuration
-      // Ini adalah konfigurasi untuk fetch() API
+      // STEP 3: Build konfigurasi untuk HTTP request
       const requestConfig = {
-        // METHOD: GET, POST, PUT, DELETE
-        // Default: GET jika tidak dispesifikasi
-        method: options.method || 'GET',
+        method: options.method || 'GET', // Method HTTP: GET, POST, PUT, DELETE (default: GET)
         
-        // HEADERS: Metadata request yang dikirim ke backend
         headers: {
-          // Content-Type: Memberitahu backend bahwa kita kirim JSON
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json', // Kirim data dalam format JSON
+          'Accept': 'application/json', // Expect respons dalam format JSON
+          'ngrok-skip-browser-warning': 'true', // Header khusus agar Ngrok tidak redirect ke warning page
+          'User-Agent': 'NFC-Payment-Mobile', // Identitas aplikasi untuk logging backend
+          ...(options.headers || {}), // Merge dengan custom headers jika ada
           
-          // Accept: Memberitahu backend bahwa kita expect JSON response
-          'Accept': 'application/json',
-          
-          // ngrok-skip-browser-warning: Header khusus Ngrok
-          // Tanpa ini, Ngrok akan redirect ke warning page (bukan API response)
-          // Warning page Ngrok muncul karena free tier protection
-          'ngrok-skip-browser-warning': 'true',
-          
-          // User-Agent: Identitas aplikasi yang melakukan request
-          // Berguna untuk logging dan analytics di backend
-          'User-Agent': 'NFC-Payment-Mobile',
-          
-          // Spread custom headers dari options (jika ada)
-          // Ini memungkinkan caller untuk override atau menambah headers
-          ...(options.headers || {}),
-          
-          // Authorization Header: JWT Token untuk authentication
+          // Jika ada token (user login), tambahkan Authorization header
           // Format: "Bearer <token>" adalah standar OAuth 2.0
-          // Hanya ditambahkan jika token ada (user sudah login)
-          // Operator ternary: condition ? true : false
-          // Spread operator: ...(object) unpacks object properties
-          ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}),
+          ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}), // Conditional header
           
-          // X-User-Id Header: Custom header untuk user identification
-          // Digunakan backend untuk tracking dan fraud detection
-          // Hanya ditambahkan jika userId ada
-          ...(this.userId ? { 'x-user-id': this.userId } : {}),
+          // Jika ada userId, tambahkan custom header untuk tracking
+          ...(this.userId ? { 'x-user-id': this.userId } : {}), // Custom header userId
         },
         
-        // BODY: Data yang dikirim ke backend (untuk POST/PUT)
-        // Hanya ditambahkan jika options.body ada
-        // JSON.stringify() converts JavaScript object → JSON string
-        // Backend akan parse JSON string ini kembali jadi object
-        body: options.body ? JSON.stringify(options.body) : undefined,
+        // Jika ada body data (untuk POST/PUT), convert object JavaScript ke JSON string
+        body: options.body ? JSON.stringify(options.body) : undefined, // Serialize body
         
-        // SIGNAL: Hubungkan dengan AbortController untuk timeout
-        // Jika controller.abort() dipanggil, fetch akan throw AbortError
-        signal: controller.signal,
+        // Hubungkan dengan AbortController untuk fitur timeout
+        signal: controller.signal, // Signal untuk cancel request
       };
 
-      // STEP 4: Log request untuk debugging
-      // Memudahkan tracking API calls saat development
-      console.log(`📱 API Call: ${options.method || 'GET'} ${fullUrl}`);
+      // STEP 4: Log request untuk memudahkan debugging
+      console.log(`📱 API Call: ${options.method || 'GET'} ${fullUrl}`); // Log method dan URL
       
-      // STEP 5: Execute HTTP request dengan fetch() API
-      // fetch() adalah native JavaScript API untuk HTTP requests
-      // Similar to axios, but built-in (no external library needed)
-      // fetch() returns Promise<Response>
-      const response = await fetch(fullUrl, requestConfig);
+      // STEP 5: Jalankan HTTP request dengan fetch() API (built-in JavaScript)
+      // fetch() return Promise yang resolve ke Response object
+      const response = await fetch(fullUrl, requestConfig); // Execute HTTP request
       
-      // STEP 6: Cancel timeout setelah response diterima
+      // STEP 6: Batalkan timeout karena respons sudah diterima
       // Jika tidak di-cancel, timeout akan tetap jalan dan trigger abort nanti
-      // clearTimeout() membatalkan setTimeout() yang sudah dibuat
-      clearTimeout(timeout);
+      clearTimeout(timeout); // Stop timer
       
-      // STEP 7: Log response status untuk debugging
-      // Status codes: 200 (OK), 201 (Created), 400 (Bad Request), 401 (Unauthorized), dll
-      console.log(`📥 Response: ${response.status}`);
+      // STEP 7: Log status code respons untuk debugging
+      // Status code: 200=OK, 201=Created, 400=Bad Request, 401=Unauthorized, dll
+      console.log(`📥 Response: ${response.status}`); // Log HTTP status
 
-      // STEP 8: Handle error responses (status code bukan 2xx)
-      // response.ok = true jika status 200-299
-      // response.ok = false jika status 400+ (client/server error)
+      // STEP 8: Handle error responses (status bukan 2xx)
+      // response.ok = true jika status 200-299, false jika 400+ (error)
       if (!response.ok) {
-        // SUBSTEP 8a: Extract error message dari response body
-        // await response.text() reads body as plain text (karena mungkin bukan JSON)
-        // .catch(() => '') fallback jika gagal read body
-        const errorText = await response.text().catch(() => '');
+        // SUBSTEP 8a: Baca body respons sebagai text (mungkin berisi pesan error)
+        const errorText = await response.text().catch(() => ''); // Fallback string kosong jika gagal
         
-        // SUBSTEP 8b: Handle authentication errors (401 Unauthorized, 403 Forbidden)
-        // 401: Token invalid atau expired
-        // 403: Token valid tapi user tidak punya permission
-        // Solusi: Logout user dan clear token, paksa login ulang
+        // SUBSTEP 8b: Jika error authentication (401/403), logout user otomatis
+        // 401 = Token invalid/expired, 403 = Token valid tapi no permission
         if (response.status === 401 || response.status === 403) {
-          console.warn('🚪 Authentication error, logging out...');
-          await this.logout(); // Clear token dan userId dari storage
+          console.warn('🚪 Authentication error, logging out...'); // Log peringatan
+          await this.logout(); // Hapus token dan userId, paksa user login ulang
         }
         
-        // SUBSTEP 8c: Parse error text sebagai JSON (jika mungkin)
-        // Backend biasanya kirim error dalam format JSON: { error: "message" }
+        // SUBSTEP 8c: Parse error text sebagai JSON jika memungkinkan
         let errorData;
         try {
-          errorData = JSON.parse(errorText);
+          errorData = JSON.parse(errorText); // Coba parse JSON
         } catch {
-          // Jika parsing gagal (bukan JSON), gunakan text mentah
-          errorData = { error: errorText };
+          errorData = { error: errorText }; // Jika bukan JSON, wrap dalam object
         }
         
-        // SUBSTEP 8d: Create detailed error message dan throw exception
-        // Format: "API Error 400: {"error":"Invalid credentials"}"
-        const errorMessage = `API Error ${response.status}: ${JSON.stringify(errorData)}`;
-        throw new Error(errorMessage);
+        // SUBSTEP 8d: Buat pesan error detail dan throw exception
+        const errorMessage = `API Error ${response.status}: ${JSON.stringify(errorData)}`; // Format pesan
+        throw new Error(errorMessage); // Lempar exception yang akan di-catch oleh caller
       }
 
-      // STEP 9: Parse response berdasarkan Content-Type
-      // response.headers.get('content-type') returns MIME type (contoh: 'application/json')
-      const contentType = response.headers.get('content-type') || '';
+      // STEP 9: Parse respons berdasarkan Content-Type yang dikirim backend
+      const contentType = response.headers.get('content-type') || ''; // Ambil MIME type
       
-      // SUBSTEP 9a: Jika response adalah JSON, parse sebagai JSON
+      // SUBSTEP 9a: Jika respons adalah JSON, parse sebagai object JavaScript
       if (contentType.includes('application/json')) {
         const result = await response.json(); // Parse JSON string → JavaScript object
         
@@ -337,28 +285,32 @@ export class APIService {
    * ================================================================================
    */
 
-  // GET Request: Untuk mengambil data dari backend
-  // Contoh: await api.get('/api/users/123') → fetch user dengan ID 123
+  // GET Request: Untuk mengambil data dari backend (read operation)
+  // HTTP GET = safe & idempotent (multiple calls tidak mengubah state)
+  // Contoh: await api.get('/api/users/123') → ambil user dengan ID 123
   async get(endpoint: string) {
-    return await this.makeRequest(endpoint, { method: 'GET' });
+    return await this.makeRequest(endpoint, { method: 'GET' }); // Wrapper: panggil makeRequest
   }
 
-  // POST Request: Untuk membuat data baru di backend
-  // Contoh: await api.post('/api/auth/login', { username, password })
+  // POST Request: Untuk membuat data baru di backend (create operation)
+  // HTTP POST = NOT idempotent (multiple calls buat multiple records)
+  // Contoh: await api.post('/api/auth/login', { username, password }) → login
   async post(endpoint: string, body?: any) {
-    return await this.makeRequest(endpoint, { method: 'POST', body });
+    return await this.makeRequest(endpoint, { method: 'POST', body }); // Kirim body sebagai JSON
   }
 
-  // PUT Request: Untuk update data yang sudah ada
-  // Contoh: await api.put('/api/users/123/balance', { balance: 100000 })
+  // PUT Request: Untuk update data yang sudah ada (update operation)
+  // HTTP PUT = idempotent (multiple calls dengan data sama = hasil sama)
+  // Contoh: await api.put('/api/users/123', { name: 'New Name' }) → update user
   async put(endpoint: string, body?: any) {
-    return await this.makeRequest(endpoint, { method: 'PUT', body });
+    return await this.makeRequest(endpoint, { method: 'PUT', body }); // Kirim body untuk update
   }
 
-  // DELETE Request: Untuk hapus data dari backend
-  // Contoh: await api.delete('/api/nfc/cards/123')
+  // DELETE Request: Untuk hapus data (delete operation)
+  // HTTP DELETE = idempotent (hapus 2x = hasil sama dengan hapus 1x)
+  // Contoh: await api.delete('/api/users/123') → hapus user ID 123
   async delete(endpoint: string) {
-    return await this.makeRequest(endpoint, { method: 'DELETE' });
+    return await this.makeRequest(endpoint, { method: 'DELETE' }); // No body needed
   }
 
   /* ================================================================================

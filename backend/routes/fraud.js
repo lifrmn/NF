@@ -1,10 +1,67 @@
+// ============================================================
+// FRAUD.JS - ROUTES UNTUK DETEKSI & MANAJEMEN FRAUD
+// ============================================================
+// File ini menangani semua operasi terkait fraud detection (pendeteksian penipuan)
+//
+// ENDPOINT:
+// - GET /alerts -> Ambil semua peringatan fraud (dengan filter & pagination)
+// - POST /alert -> Buat peringatan fraud baru (dari mobile app)
+// - PUT /alerts/:id/status -> Update status fraud alert (NEW/REVIEWED/RESOLVED)
+// - GET /stats -> Statistik fraud (total alerts, risk breakdown, dll)
+// - POST /analyze -> Analisa risiko transaksi secara manual
+//
+// KONSEP FRAUD DETECTION:
+// 1. RISK SCORING: Setiap transaksi diberi skor risiko 0-100
+// 2. RISK LEVELS: LOW, MEDIUM, HIGH, CRITICAL
+// 3. DECISIONS: ALLOW, REVIEW (butuh verifikasi), BLOCK (ditolak otomatis)
+// 4. REAL-TIME ALERTS: Fraud terdeteksi -> langsung notif ke admin dashboard
+//
+// CONTOH SKENARIO FRAUD:
+// - Transaksi dengan jumlah tidak normal (terlalu besar/kecil)
+// - Transaksi terlalu cepat berturut-turut (velocity attack)
+// - Pola transaksi aneh (malam hari, lokasi berbeda, dll)
+// - Penerima baru yang belum pernah dikirim uang
+//
+// FLOW FRAUD DETECTION:
+// Mobile App melakukan transaksi -> Deteksi fraud (Z-Score) -> 
+// Jika HIGH/CRITICAL -> Kirim alert ke server -> Admin review ->
+// Admin putuskan: ALLOW atau BLOCK
+// ============================================================
+
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// Get all fraud alerts
+// ============================================================
+// ENDPOINT 1: GET /alerts - AMBIL SEMUA PERINGATAN FRAUD
+// ============================================================
+// Endpoint untuk admin melihat daftar fraud alerts
+//
+// QUERY PARAMETERS:
+// - limit: jumlah data (default: 50)
+// - offset: skip data (untuk pagination)
+// - status: filter by status (NEW/REVIEWED/RESOLVED)
+// - riskLevel: filter by risk (LOW/MEDIUM/HIGH/CRITICAL)
+//
+// CONTOH:
+// GET /api/fraud/alerts?limit=20&status=NEW&riskLevel=HIGH
+//
+// RESPONSE:
+// [
+//   {
+//     \"id\": 1,
+//     \"userId\": 5,
+//     \"riskScore\": 85,
+//     \"riskLevel\": \"HIGH\",
+//     \"decision\": \"REVIEW\",
+//     \"reasons\": [\"Transaksi tidak normal\", \"Kecepatan tinggi\"],
+//     \"user\": { \"id\": 5, \"name\": \"John\", \"username\": \"john\" },
+//     \"createdAt\": \"2025-01-20T10:00:00Z\"
+//   }
+// ]
+// ============================================================
 router.get('/alerts', async (req, res) => {
   try {
     const { limit = 50, offset = 0, status, riskLevel } = req.query;
@@ -29,18 +86,18 @@ router.get('/alerts', async (req, res) => {
 
     res.json(alerts);
   } catch (error) {
-    console.error('Get fraud alerts error:', error);
-    res.status(500).json({ error: 'Failed to get fraud alerts' });
+    console.error('❌ Kesalahan mendapatkan peringatan fraud:', error);
+    res.status(500).json({ error: 'Gagal mendapatkan peringatan fraud' });
   }
 });
 
-// Create fraud alert (from mobile app)
+// Buat peringatan fraud (dari aplikasi mobile)
 router.post('/alert', async (req, res) => {
   try {
     const { device, fraudDetection } = req.body;
     
     if (!fraudDetection) {
-      return res.status(400).json({ error: 'Fraud detection data required' });
+      return res.status(400).json({ error: 'Data deteksi fraud diperlukan' });
     }
 
     const alert = await prisma.fraudAlert.create({
@@ -60,7 +117,7 @@ router.post('/alert', async (req, res) => {
       }
     });
 
-    // Emit to admin dashboard
+    // Kirim ke dashboard admin
     if (req.io) {
       req.io.to('admin-room').emit('fraud-alert', {
         alert: {
@@ -71,33 +128,33 @@ router.post('/alert', async (req, res) => {
       });
     }
 
-    console.log(`🚨 FRAUD ALERT: ${fraudDetection.riskLevel} risk (${fraudDetection.riskScore}%) from device ${device?.deviceId?.slice(-8) || 'unknown'}`);
+    console.log(`🚨 PERINGATAN FRAUD: risiko ${fraudDetection.riskLevel} (${fraudDetection.riskScore}%) dari perangkat ${device?.deviceId?.slice(-8) || 'unknown'}`);
 
     res.json({
       success: true,
-      message: 'Fraud alert received and stored',
+      message: 'Peringatan fraud diterima dan disimpan',
       alertId: alert.id
     });
 
   } catch (error) {
-    console.error('Create fraud alert error:', error);
-    res.status(500).json({ error: 'Failed to process fraud alert' });
+    console.error('❌ Kesalahan membuat peringatan fraud:', error);
+    res.status(500).json({ error: 'Gagal memproses peringatan fraud' });
   }
 });
 
-// Update fraud alert status
+// Perbarui status peringatan fraud
 router.put('/alerts/:id/status', async (req, res) => {
   try {
     const { id } = req.params;
     const { status, adminPassword } = req.body;
 
-    // Verify admin password
+    // Verifikasi password admin
     if (adminPassword !== process.env.ADMIN_PASSWORD) {
-      return res.status(401).json({ error: 'Invalid admin password' });
+      return res.status(401).json({ error: 'Password admin tidak valid' });
     }
 
     if (!['NEW', 'REVIEWED', 'RESOLVED'].includes(status)) {
-      return res.status(400).json({ error: 'Invalid status' });
+      return res.status(400).json({ error: 'Status tidak valid' });
     }
 
     const alert = await prisma.fraudAlert.update({
@@ -110,7 +167,7 @@ router.put('/alerts/:id/status', async (req, res) => {
       }
     });
 
-    // Log admin action
+    // Catat aksi admin
     await prisma.adminLog.create({
       data: {
         action: 'FRAUD_ALERT_UPDATE',
@@ -124,23 +181,23 @@ router.put('/alerts/:id/status', async (req, res) => {
       }
     });
 
-    // Emit to admin dashboard
+    // Kirim ke dashboard admin
     if (req.io) {
       req.io.to('admin-room').emit('fraud-alert-updated', { alert });
     }
 
     res.json({
-      message: 'Fraud alert updated successfully',
+      message: 'Peringatan fraud berhasil diperbarui',
       alert
     });
 
   } catch (error) {
-    console.error('Update fraud alert error:', error);
-    res.status(500).json({ error: 'Failed to update fraud alert' });
+    console.error('❌ Kesalahan memperbarui peringatan fraud:', error);
+    res.status(500).json({ error: 'Gagal memperbarui peringatan fraud' });
   }
 });
 
-// Get fraud statistics
+// Dapatkan statistik fraud
 router.get('/stats', async (req, res) => {
   try {
     const { period = '7d' } = req.query;
@@ -204,38 +261,38 @@ router.get('/stats', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Get fraud stats error:', error);
-    res.status(500).json({ error: 'Failed to get fraud statistics' });
+    console.error('❌ Kesalahan mendapatkan statistik fraud:', error);
+    res.status(500).json({ error: 'Gagal mendapatkan statistik fraud' });
   }
 });
 
-// Analyze transaction risk (manual check)
+// Analisa risiko transaksi (pemeriksaan manual)
 router.post('/analyze', async (req, res) => {
   try {
     const { senderId, receiverId, amount, deviceId } = req.body;
 
     if (!senderId || !receiverId || !amount) {
-      return res.status(400).json({ error: 'Missing required fields' });
+      return res.status(400).json({ error: 'Field yang diperlukan tidak lengkap' });
     }
 
-    // Basic fraud analysis without circular import
+    // Analisis fraud dasar tanpa circular import
     const basicAnalysis = {
       riskScore: Math.floor(Math.random() * 100),
       riskLevel: 'MEDIUM',
       decision: 'ALLOW',
-      reasons: ['Manual analysis requested'],
+      reasons: ['Analisis manual diminta'],
       confidence: 0.75,
       timestamp: new Date().toISOString()
     };
 
     res.json({
-      message: 'Transaction analysis completed',
+      message: 'Analisis transaksi selesai',
       analysis: basicAnalysis
     });
 
   } catch (error) {
-    console.error('Analyze transaction error:', error);
-    res.status(500).json({ error: 'Failed to analyze transaction' });
+    console.error('❌ Kesalahan menganalisa transaksi:', error);
+    res.status(500).json({ error: 'Gagal menganalisa transaksi' });
   }
 });
 

@@ -1,75 +1,75 @@
 // src/screens/MyCardsScreen.tsx
 /* ==================================================================================
- * 🎴 SCREEN: MyCardsScreen
+ * 🎴 LAYAR: MyCardsScreen
  * ==================================================================================
  * 
- * Purpose:
- * Card management screen untuk view dan manage NFC cards yang terdaftar.
- * User dapat aktivasi, blokir, dan monitor status kartu NFC mereka.
+ * Tujuan:
+ * Layar manajemen kartu untuk melihat dan mengelola kartu NFC yang terdaftar.
+ * Pengguna dapat mengaktifkan, memblokir, dan memantau status kartu NFC mereka.
  * 
- * User Flow:
+ * Alur Pengguna:
  * ┌────────────────────────────────────────────────────────────────────┐
- * │ DashboardScreen → Tap "🎴 My Cards" → MyCardsScreen                │
+ * │ LayarDashboard → Ketuk "🎴 Kartu Saya" → LayarKartuSaya            │
  * │                                                                     │
- * │ Screen Features:                                                    │
- * │ 1. Header: Back button + "Kartu Saya" title                        │
- * │ 2. Pull-to-Refresh: Swipe down untuk reload cards                  │
- * │ 3. Card List: Display registered cards (1 card policy)             │
- * │    - Card UID                                                       │
- * │    - Card Type & Frequency (e.g., "NTag215 • 13.56 MHz")          │
- * │    - Status Badge (Aktif/Diblokir/Hilang/Kadaluarsa)              │
- * │    - Balance display                                                │
- * │    - Last used timestamp                                            │
- * │    - Created date                                                   │
- * │ 4. Action Buttons per Card:                                         │
- * │    - If ACTIVE: "🚫 Blokir Kartu" (for lost/stolen)               │
- * │    - If BLOCKED: "✅ Aktifkan Kartu" (reactivate)                  │
- * │ 5. Empty State: "Belum Ada Kartu" + register button                │
+ * │ Fitur Layar:                                                        │
+ * │ 1. Header: Tombol kembali + judul "Kartu Saya"                     │
+ * │ 2. Tarik-untuk-Segarkan: Geser ke bawah untuk muat ulang kartu     │
+ * │ 3. Daftar Kartu: Tampilkan kartu terdaftar (kebijakan 1 kartu)     │
+ * │    - UID Kartu                                                      │
+ * │    - Tipe Kartu & Frekuensi (contoh: "NTag215 • 13.56 MHz")       │
+ * │    - Lencana Status (Aktif/Diblokir/Hilang/Kadaluarsa)            │
+ * │    - Tampilan saldo                                                 │
+ * │    - Waktu terakhir digunakan                                       │
+ * │    - Tanggal dibuat                                                 │
+ * │ 4. Tombol Aksi per Kartu:                                           │
+ * │    - Jika AKTIF: "🚫 Blokir Kartu" (untuk hilang/dicuri)          │
+ * │    - Jika DIBLOKIR: "✅ Aktifkan Kartu" (aktifkan kembali)        │
+ * │ 5. State Kosong: "Belum Ada Kartu" + tombol daftar                 │
  * └────────────────────────────────────────────────────────────────────┘
  * 
- * Key Features:
+ * Fitur Utama:
  * 
- * 1. Card Management Policy:
- *    - 1 CARD PER USER (business rule)
- *    - Prevent multiple cards per user
- *    - Display only first card (cards.slice(0, 1))
- *    - Important untuk fraud prevention
+ * 1. Kebijakan Manajemen Kartu:
+ *    - 1 KARTU PER PENGGUNA (aturan bisnis)
+ *    - Mencegah beberapa kartu per pengguna
+ *    - Tampilkan hanya kartu pertama (cards.slice(0, 1))
+ *    - Penting untuk pencegahan penipuan
  * 
- * 2. Block/Activate Cards:
- *    - Block: User-initiated (kartu hilang/dicuri)
- *    - Activate: Reactivate blocked card
- *    - Confirmation alert before action
+ * 2. Blokir/Aktifkan Kartu:
+ *    - Blokir: Diprakarsai pengguna (kartu hilang/dicuri)
+ *    - Aktifkan: Aktifkan kembali kartu yang diblokir
+ *    - Peringatan konfirmasi sebelum aksi
  *    - PUT /api/nfc-cards/status
  * 
- * 3. Status Color Coding:
- *    - ACTIVE: Green (#27ae60) ✅
- *    - BLOCKED: Red (#e74c3c) 🚫
- *    - LOST: Gray (#95a5a6) ❌
- *    - EXPIRED: Orange (#f39c12) ⚠️
+ * 3. Kode Warna Status:
+ *    - ACTIVE: Hijau (#27ae60) ✅
+ *    - BLOCKED: Merah (#e74c3c) 🚫
+ *    - LOST: Abu-abu (#95a5a6) ❌
+ *    - EXPIRED: Oranye (#f39c12) ⚠️
  * 
- * 4. Pull-to-Refresh:
- *    - Manual refresh dari backend
- *    - Update card status dan balance
- *    - RefreshControl component
+ * 4. Tarik-untuk-Segarkan:
+ *    - Penyegaran manual dari backend
+ *    - Perbarui status kartu dan saldo
+ *    - Komponen RefreshControl
  * 
- * 5. Error Handling:
- *    - 404: No cards registered (show empty state)
- *    - 401/403: Session expired (re-login prompt)
- *    - Network error: Connection alert
+ * 5. Penanganan Error:
+ *    - 404: Tidak ada kartu terdaftar (tampilkan state kosong)
+ *    - 401/403: Sesi kadaluarsa (prompt login ulang)
+ *    - Error jaringan: Peringatan koneksi
  * 
- * API Endpoints Used:
- * - GET /api/nfc-cards/list?userId={userId}: Load user cards
- * - PUT /api/nfc-cards/status: Update card status (ACTIVE/BLOCKED)
+ * Endpoint API yang Digunakan:
+ * - GET /api/nfc-cards/list?userId={userId}: Muat kartu pengguna
+ * - PUT /api/nfc-cards/status: Perbarui status kartu (ACTIVE/BLOCKED)
  * 
- * State Management:
- * - cards: Array of NFCCard objects (max 1 item)
- * - loading: Boolean untuk initial load spinner
- * - refreshing: Boolean untuk RefreshControl animation
+ * Manajemen State:
+ * - cards: Array objek NFCCard (maksimal 1 item)
+ * - loading: Boolean untuk spinner muat awal
+ * - refreshing: Boolean untuk animasi RefreshControl
  * 
  * Props:
- * - user: Current user object (id, name, balance)
- * - onBack: Callback untuk navigate back to DashboardScreen
- * - onRegisterNew: Optional callback untuk RegisterCardScreen
+ * - user: Objek pengguna saat ini (id, name, balance)
+ * - onBack: Callback untuk navigasi kembali ke LayarDashboard
+ * - onRegisterNew: Callback opsional untuk LayarDaftarKartu
  * 
  * ==================================================================================
  */
@@ -89,23 +89,23 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { apiService } from '../utils/apiService';
 
 /* ==================================================================================
- * TYPE DEFINITIONS
+ * DEFINISI TIPE
  * ==================================================================================
  * MyCardsScreenProps:
- * - user: Current user object (includes id, name, balance)
- * - onBack: Callback untuk navigate back
- * - onRegisterNew: Optional callback untuk RegisterCardScreen
+ * - user: Objek pengguna saat ini (termasuk id, name, balance)
+ * - onBack: Callback untuk navigasi kembali
+ * - onRegisterNew: Callback opsional untuk LayarDaftarKartu
  * 
  * NFCCard:
- * - id: Database primary key
- * - cardId: Physical card UID (unique identifier)
- * - cardType: Card hardware type (e.g., "NTag215")
- * - frequency: NFC frequency (e.g., "13.56 MHz")
- * - cardStatus: Status enum (ACTIVE | BLOCKED | LOST | EXPIRED)
- * - balance: Card balance (synced with user balance)
- * - lastUsed: Timestamp last transaction (nullable)
- * - createdAt: Registration timestamp
- * - user: Optional user object (for admin view)
+ * - id: Kunci utama database
+ * - cardId: UID kartu fisik (pengenal unik)
+ * - cardType: Tipe perangkat keras kartu (contoh: "NTag215")
+ * - frequency: Frekuensi NFC (contoh: "13.56 MHz")
+ * - cardStatus: Enum status (ACTIVE | BLOCKED | LOST | EXPIRED)
+ * - balance: Saldo kartu (sinkron dengan saldo pengguna)
+ * - lastUsed: Waktu transaksi terakhir (dapat null)
+ * - createdAt: Waktu pendaftaran
+ * - user: Objek pengguna opsional (untuk tampilan admin)
  * ==================================================================================
  */
 interface MyCardsScreenProps {
@@ -142,14 +142,17 @@ interface NFCCard {
  * ==================================================================================
  */
 export default function MyCardsScreen({ user, onBack, onRegisterNew }: MyCardsScreenProps) {
-  // STATE 1: cards - Array of user's NFC cards (max 1 per policy)
-  const [cards, setCards] = useState<NFCCard[]>([]);
+  // STATE 1: cards - Array kartu NFC yang terdaftar (maksimal 1 kartu per user sesuai kebijakan bisnis)
+  // Setiap item berisi info lengkap kartu: UID, status, balance, dll
+  const [cards, setCards] = useState<NFCCard[]>([]); // Awalnya array kosong
   
-  // STATE 2: loading - Initial load spinner
-  const [loading, setLoading] = useState(true);
+  // STATE 2: loading - Flag spinner saat pertama kali load data dari backend
+  // true = tampilkan loading screen, false = tampilkan daftar kartu
+  const [loading, setLoading] = useState(true); // Awal: true (loading)
   
-  // STATE 3: refreshing - Pull-to-refresh animation
-  const [refreshing, setRefreshing] = useState(false);
+  // STATE 3: refreshing - Flag animasi pull-to-refresh saat user swipe down
+  // true = tampilkan spinner refresh, false = sembunyikan
+  const [refreshing, setRefreshing] = useState(false); // Awalnya tidak refresh
 
   useEffect(() => {
     console.log('🎴 MyCardsScreen mounted');

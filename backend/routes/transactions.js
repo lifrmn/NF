@@ -6,31 +6,31 @@ const router = express.Router();
 const prisma = new PrismaClient();
 
 /* -------------------------------------------------------------------------- */
-/*                          FRAUD DETECTION SERVICE                           */
-/*                      Z-SCORE BASED ANOMALY DETECTION                       */
+/*                         LAYANAN DETEKSI FRAUD                              */
+/*                  DETEKSI ANOMALI BERBASIS Z-SCORE                         */
 /* -------------------------------------------------------------------------- */
 /**
- * Academic-Grade Fraud Detection using Statistical Anomaly Detection
+ * Deteksi Fraud Tingkat Akademis menggunakan Deteksi Anomali Statistik
  * 
- * Algorithm: Z-Score Based Weighted Risk Scoring
- * References:
+ * Algoritma: Weighted Risk Scoring Berbasis Z-Score
+ * Referensi:
  * - Chandola, V., Banerjee, A., & Kumar, V. (2009). "Anomaly detection: A survey"
  * - Bolton, R. J., & Hand, D. J. (2002). "Statistical fraud detection: A review"
  * 
- * NO IF-ELSE LOGIC - Pure mathematical formulas with ternary operators for mapping only
+ * TANPA LOGIKA IF-ELSE - Formula matematika murni dengan operator ternary hanya untuk mapping
  */
 class FraudDetectionService {
   /**
-   * Calculate Z-Score for anomaly detection
+   * Hitung Z-Score untuk deteksi anomali
    * Z = (X - μ) / σ
-   * where X = observed value, μ = mean, σ = standard deviation
+   * di mana X = nilai observasi, μ = rata-rata, σ = deviasi standar
    */
   static calculateZScore(value, mean, stdDev) {
     return stdDev === 0 ? 0 : (value - mean) / stdDev;
   }
 
   /**
-   * Calculate standard deviation from array of values
+   * Hitung deviasi standar dari array nilai
    */
   static calculateStdDev(values, mean) {
     const n = values.length;
@@ -39,22 +39,22 @@ class FraudDetectionService {
   }
 
   /**
-   * Normalize score to 0-1 range using sigmoid-like function
+   * Normalisasi skor ke rentang 0-1 menggunakan fungsi sigmoid
    */
   static normalizeScore(zScore) {
     return 1 / (1 + Math.exp(-zScore));
   }
 
   /**
-   * Main fraud detection analysis using Z-Score algorithm
+   * Analisis deteksi fraud utama menggunakan algoritma Z-Score
    */
   static async analyzeTransaction({ senderId, receiverId, amount, deviceId }) {
     const reasons = [];
     const riskFactors = {};
 
     // ========================================================================
-    // FACTOR 1: VELOCITY SCORE (35% weight)
-    // Measures transaction frequency anomaly using time-based Z-Score
+    // FAKTOR 1: SKOR KECEPATAN (bobot 35%)
+    // Mengukur anomali frekuensi transaksi menggunakan Z-Score berbasis waktu
     // ========================================================================
     const timeWindows = {
       '5min': 5 * 60 * 1000,
@@ -89,7 +89,7 @@ class FraudDetectionService {
       last24h: recentTransactions[2].length
     };
 
-    // Historical average calculation
+    // Perhitungan rata-rata historis
     const allUserTxs = await prisma.transaction.findMany({
       where: { senderId },
       select: { createdAt: true },
@@ -101,11 +101,11 @@ class FraudDetectionService {
       ? (allUserTxs.length / Math.max((Date.now() - new Date(allUserTxs[allUserTxs.length - 1].createdAt).getTime()) / (60 * 60 * 1000), 1))
       : 0;
 
-    // Z-Score calculation for velocity
+    // Perhitungan Z-Score untuk kecepatan
     const velocityZScore = this.calculateZScore(
       counts.lastHour,
       avgTxPerHour,
-      Math.sqrt(avgTxPerHour) // Poisson distribution approximation
+      Math.sqrt(avgTxPerHour) // Aproksimasi distribusi Poisson
     );
 
     const velocityScore = this.normalizeScore(velocityZScore) * 100;
@@ -119,12 +119,12 @@ class FraudDetectionService {
       zScore: Math.round(velocityZScore * 100) / 100
     };
 
-    // Generate reason using ternary (no if-else)
-    velocityScore > 70 ? reasons.push(`High transaction velocity detected (Z-Score: ${Math.round(velocityZScore * 100) / 100})`) : null;
+    // Buat alasan menggunakan ternary (tanpa if-else)
+    velocityScore > 70 ? reasons.push(`Kecepatan transaksi tinggi terdeteksi (Z-Score: ${Math.round(velocityZScore * 100) / 100})`) : null;
 
     // ========================================================================
-    // FACTOR 2: AMOUNT Z-SCORE (40% weight)
-    // Statistical anomaly in transaction amount
+    // FAKTOR 2: Z-SCORE JUMLAH (bobot 40%)
+    // Anomali statistik pada jumlah transaksi
     // ========================================================================
     const userStats = await prisma.transaction.aggregate({
       where: { senderId },
@@ -153,11 +153,11 @@ class FraudDetectionService {
       zScore: Math.round(amountZScore * 100) / 100
     };
 
-    normalizedAmountScore > 70 ? reasons.push(`Transaction amount is statistically anomalous (Z-Score: ${Math.round(amountZScore * 100) / 100})`) : null;
+    normalizedAmountScore > 70 ? reasons.push(`Jumlah transaksi secara statistik anomali (Z-Score: ${Math.round(amountZScore * 100) / 100})`) : null;
 
     // ========================================================================
-    // FACTOR 3: FREQUENCY SCORE (15% weight)
-    // Pattern deviation from user's typical behavior
+    // FAKTOR 3: SKOR FREKUENSI (bobot 15%)
+    // Deviasi pola dari perilaku khas pengguna
     // ========================================================================
     const last7Days = await prisma.transaction.findMany({
       where: {
@@ -196,11 +196,11 @@ class FraudDetectionService {
       zScore: Math.round(frequencyZScore * 100) / 100
     };
 
-    frequencyScore > 70 ? reasons.push(`Unusual transaction frequency pattern (Z-Score: ${Math.round(frequencyZScore * 100) / 100})`) : null;
+    frequencyScore > 70 ? reasons.push(`Pola frekuensi transaksi tidak biasa (Z-Score: ${Math.round(frequencyZScore * 100) / 100})`) : null;
 
     // ========================================================================
-    // FACTOR 4: BEHAVIOR SCORE (10% weight)
-    // Unusual behavior patterns (new receiver, unusual time, etc.)
+    // FAKTOR 4: SKOR PERILAKU (bobot 10%)
+    // Pola perilaku tidak biasa (penerima baru, waktu tidak biasa, dll.)
     // ========================================================================
     const previousReceiverTxs = await prisma.transaction.count({
       where: {
@@ -211,7 +211,7 @@ class FraudDetectionService {
 
     const isNewReceiver = previousReceiverTxs === 0 ? 1 : 0;
     
-    // Time-based anomaly (unusual hour)
+    // Anomali berbasis waktu (jam tidak biasa)
     const currentHour = new Date().getHours();
     const hourlyTxs = await prisma.transaction.findMany({
       where: { senderId },
@@ -229,7 +229,7 @@ class FraudDetectionService {
     const currentHourCount = hourCounts[currentHour];
     const isUnusualTime = currentHourCount < avgHourlyTxCount * 0.5 ? 1 : 0;
 
-    // Behavior score calculation (no if-else, pure formula)
+    // Perhitungan skor perilaku (tanpa if-else, formula murni)
     const behaviorScore = (isNewReceiver * 50 + isUnusualTime * 50);
 
     riskFactors.behaviorScore = behaviorScore;
@@ -241,11 +241,11 @@ class FraudDetectionService {
       avgTransactionsAtThisHour: Math.round(currentHourCount * 100) / 100
     };
 
-    behaviorScore > 70 ? reasons.push(`Unusual behavioral pattern detected`) : null;
-    isNewReceiver === 1 ? reasons.push('Transaction to new receiver') : null;
+    behaviorScore > 70 ? reasons.push(`Pola perilaku tidak biasa terdeteksi`) : null;
+    isNewReceiver === 1 ? reasons.push('Transaksi ke penerima baru') : null;
 
     // ========================================================================
-    // WEIGHTED RISK CALCULATION (NO IF-ELSE)
+    // PERHITUNGAN RISIKO TERTIMBANG (TANPA IF-ELSE)
     // ========================================================================
     const weights = {
       velocity: 0.35,
@@ -262,7 +262,7 @@ class FraudDetectionService {
     );
 
     // ========================================================================
-    // RISK LEVEL MAPPING (Using ternary operators - academic threshold mapping)
+    // PEMETAAN TINGKAT RISIKO (Menggunakan operator ternary - pemetaan ambang akademis)
     // ========================================================================
     const riskLevel = 
       overallRiskScore >= 80 ? 'CRITICAL' :
@@ -273,11 +273,11 @@ class FraudDetectionService {
       overallRiskScore >= 80 ? 'BLOCK' :
       overallRiskScore >= 60 ? 'REVIEW' : 'ALLOW';
 
-    // Confidence based on data availability (more data = higher confidence)
+    // Keyakinan berdasarkan ketersediaan data (lebih banyak data = keyakinan lebih tinggi)
     const dataPoints = amounts.length + hourlyTxs.length + allUserTxs.length;
     const confidence = Math.min(0.95, 0.5 + (dataPoints / 300) * 0.45);
 
-    reasons.length === 0 ? reasons.push('No significant risk factors detected') : null;
+    reasons.length === 0 ? reasons.push('Tidak ada faktor risiko signifikan terdeteksi') : null;
 
     return {
       riskScore: Math.round(overallRiskScore * 100) / 100,
@@ -287,14 +287,14 @@ class FraudDetectionService {
       confidence: Math.round(confidence * 100) / 100,
       riskFactors,
       timestamp: new Date().toISOString(),
-      algorithm: 'Z-Score Anomaly Detection',
+      algorithm: 'Deteksi Anomali Z-Score',
       weights
     };
   }
 }
 
 /* -------------------------------------------------------------------------- */
-/*                             GET ALL TRANSACTIONS                           */
+/*                          DAPATKAN SEMUA TRANSAKSI                          */
 /* -------------------------------------------------------------------------- */
 router.get('/', async (req, res) => {
   try {
@@ -322,19 +322,19 @@ router.get('/', async (req, res) => {
 
     res.json(transactions);
   } catch (error) {
-    console.error('Get transactions error:', error);
-    res.status(500).json({ error: 'Failed to get transactions' });
+    console.error('❌ Kesalahan mendapatkan transaksi:', error);
+    res.status(500).json({ error: 'Gagal mendapatkan transaksi' });
   }
 });
 
 /* -------------------------------------------------------------------------- */
-/*                        GET TRANSACTIONS BY USER ID                         */
+/*                   DAPATKAN TRANSAKSI BERDASARKAN ID PENGGUNA               */
 /* -------------------------------------------------------------------------- */
 router.get('/user/:userId', async (req, res) => {
   try {
     const userId = parseInt(req.params.userId, 10);
     if (isNaN(userId)) {
-      return res.status(400).json({ error: 'Invalid user ID' });
+      return res.status(400).json({ error: 'ID pengguna tidak valid' });
     }
 
     const { limit = 20, offset = 0, status } = req.query;
@@ -363,7 +363,7 @@ router.get('/user/:userId', async (req, res) => {
       skip: parseInt(String(offset), 10),
     });
 
-    // Add transaction type info (sent/received) for the requesting user
+    // Tambahkan info tipe transaksi (terkirim/diterima) untuk pengguna yang meminta
     const transactionsWithType = transactions.map(transaction => ({
       ...transaction,
       transactionType: transaction.senderId === userId ? 'sent' : 'received'
@@ -371,13 +371,13 @@ router.get('/user/:userId', async (req, res) => {
 
     res.json(transactionsWithType);
   } catch (error) {
-    console.error('Get user transactions error:', error);
-    res.status(500).json({ error: 'Failed to get user transactions' });
+    console.error('❌ Kesalahan mendapatkan transaksi pengguna:', error);
+    res.status(500).json({ error: 'Gagal mendapatkan transaksi pengguna' });
   }
 });
 
 /* -------------------------------------------------------------------------- */
-/*                    TRANSACTION STATS (PLACE BEFORE /:id)                   */
+/*           STATISTIK TRANSAKSI (TEMPATKAN SEBELUM /:id)                    */
 /* -------------------------------------------------------------------------- */
 router.get('/stats/summary', async (req, res) => {
   try {
@@ -409,18 +409,18 @@ router.get('/stats/summary', async (req, res) => {
       averageAmount: avg._avg.amount || 0,
     });
   } catch (error) {
-    console.error('Get transaction stats error:', error);
-    res.status(500).json({ error: 'Failed to get transaction statistics' });
+    console.error('❌ Kesalahan mendapatkan statistik transaksi:', error);
+    res.status(500).json({ error: 'Gagal mendapatkan statistik transaksi' });
   }
 });
 
 /* -------------------------------------------------------------------------- */
-/*                             CREATE NEW TRANSACTION                         */
+/*                          BUAT TRANSAKSI BARU                               */
 /* -------------------------------------------------------------------------- */
 router.post(
   '/',
   [
-    body('amount').isFloat({ min: 0.01 }).withMessage('Amount must be greater than 0'),
+    body('amount').isFloat({ min: 0.01 }).withMessage('Jumlah harus lebih dari 0'),
     body('receiverUsername').optional().isString(),
     body('receiverId').optional().isInt(),
     // catatan: senderId dari body tidak dipercaya, hanya fallback
@@ -444,7 +444,7 @@ router.post(
 
       // Ambil sender dari token (authenticateToken), kalau tidak ada baru fallback body
       const senderId = req.user?.id ?? senderIdFromBody;
-      if (!senderId) return res.status(401).json({ error: 'Sender not authenticated' });
+      if (!senderId) return res.status(401).json({ error: 'Pengirim tidak terautentikasi' });
 
       const amountNum = Number(amount);
       if (!Number.isFinite(amountNum) || amountNum <= 0) {
@@ -467,7 +467,7 @@ router.post(
         return res.status(400).json({ error: 'Insufficient balance' });
       }
 
-      // Fraud detection
+      // Deteksi fraud
       const fraudResult = await FraudDetectionService.analyzeTransaction({
         senderId: Number(senderId),
         receiverId: receiver.id,
@@ -568,19 +568,19 @@ router.post(
 
       res.status(201).json({
         success: true,
-        message: 'Transaction completed successfully',
+        message: 'Transaksi berhasil diselesaikan',
         transaction,
         fraudResult,
       });
     } catch (error) {
-      console.error('Create transaction error:', error);
-      res.status(500).json({ error: 'Failed to create transaction' });
+      console.error('❌ Kesalahan membuat transaksi:', error);
+      res.status(500).json({ error: 'Gagal membuat transaksi' });
     }
   }
 );
 
 /* -------------------------------------------------------------------------- */
-/*                             GET TRANSACTION BY ID                          */
+/*                      DAPATKAN TRANSAKSI BERDASARKAN ID                     */
 /* -------------------------------------------------------------------------- */
 router.get('/:id', async (req, res) => {
   try {
@@ -598,8 +598,8 @@ router.get('/:id', async (req, res) => {
     if (!transaction) return res.status(404).json({ error: 'Transaction not found' });
     res.json(transaction);
   } catch (error) {
-    console.error('Get transaction error:', error);
-    res.status(500).json({ error: 'Failed to get transaction' });
+    console.error('❌ Kesalahan mendapatkan transaksi:', error);
+    res.status(500).json({ error: 'Gagal mendapatkan transaksi' });
   }
 });
 

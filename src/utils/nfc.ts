@@ -3,56 +3,56 @@
  * 📡 UTILITY: NFCService
  * ==================================================================================
  * 
- * Purpose:
- * Comprehensive NFC (Near Field Communication) service untuk handle semua operasi
+ * Tujuan:
+ * Layanan NFC (Near Field Communication) komprehensif untuk handle semua operasi
  * pembacaan dan penulisan NFC physical cards (NTag215).
  * Core utility untuk contactless payment system dengan physical NFC cards.
  * 
- * Technology Stack:
+ * Stack Teknologi:
  * - Library: react-native-nfc-manager
- * - Card Type: NTag215 (NXP Semiconductors)
- * - Frequency: 13.56 MHz (HF - High Frequency)
- * - Protocol: ISO/IEC 14443 Type A
- * - Memory: 540 bytes user memory (144 bytes NDEF)
+ * - Tipe Kartu: NTag215 (NXP Semiconductors)
+ * - Frekuensi: 13.56 MHz (HF - High Frequency)
+ * - Protokol: ISO/IEC 14443 Type A
+ * - Memori: 540 bytes user memory (144 bytes NDEF)
  * - Format: NDEF (NFC Data Exchange Format)
  * 
- * NTag215 Specifications:
+ * Spesifikasi NTag215:
  * ┌────────────────────────────────────────────────────────────────────┐
- * │ Memory Structure:                                                   │
+ * │ Struktur Memori:                                                    │
  * │ - Total: 540 bytes                                                  │
  * │ - User Memory: 504 bytes (pages 4-129)                             │
- * │ - NDEF Message: Up to 144 bytes                                     │
+ * │ - NDEF Message: Hingga 144 bytes                                   │
  * │ - UID: 7 bytes (unique identifier)                                  │
- * │ - Read/Write: Multiple times (not one-time programmable)           │
- * │ - Security: Password protection available (32-bit)                  │
+ * │ - Read/Write: Multiple kali (tidak one-time programmable)          │
+ * │ - Keamanan: Password protection tersedia (32-bit)                  │
  * └────────────────────────────────────────────────────────────────────┘
  * 
- * Use Cases:
+ * Use Cases (Kasus Penggunaan):
  * 
- * 1. Payment Transactions:
- *    - Buyer tap card to merchant's phone
- *    - System read card UID untuk identify user
- *    - Backend process payment: buyer balance → merchant balance
- *    - No internet required on card (backend handles transaction)
+ * 1. Transaksi Pembayaran:
+ *    - Pembeli tap kartu ke HP merchant
+ *    - Sistem baca UID kartu untuk identifikasi user
+ *    - Backend proses payment: balance pembeli → balance merchant
+ *    - Tidak perlu internet di kartu (backend yang handle transaksi)
  * 
- * 2. Card Registration:
- *    - New user scan physical NTag215 card
- *    - System read card UID (unique identifier)
- *    - Backend register card to user account
- *    - Card becomes linked payment instrument
+ * 2. Registrasi Kartu:
+ *    - User baru scan physical NTag215 card
+ *    - Sistem baca UID kartu (unique identifier)
+ *    - Backend daftarkan kartu ke akun user
+ *    - Kartu menjadi instrumen pembayaran yang ter-link
  * 
- * 3. Card Validation:
- *    - Read card info (UID, type, manufacturer)
- *    - Validate card is NTag215 (not Mifare, etc.)
- *    - Check card status (active, blocked, lost)
- *    - Verify card ownership
+ * 3. Validasi Kartu:
+ *    - Baca info kartu (UID, type, manufacturer)
+ *    - Validasi kartu adalah NTag215 (bukan Mifare, dll)
+ *    - Cek status kartu (aktif, diblokir, hilang)
+ *    - Verifikasi kepemilikan kartu
  * 
- * Architecture Overview:
+ * Ringkasan Arsitektur:
  * ┌─────────────────────────────────────────────────────────────────────┐
- * │                         NFC OPERATION FLOW                          │
+ * │                      ALUR OPERASI NFC                               │
  * ├─────────────────────────────────────────────────────────────────────┤
  * │                                                                      │
- * │  Mobile App (React Native)                                          │
+ * │  Aplikasi Mobile (React Native)                                     │
  * │       ↓                                                              │
  * │  NFCService.readPhysicalCard()                                      │
  * │       ↓                                                              │
@@ -62,51 +62,51 @@
  * │       ↓                                                              │
  * │  Physical NTag215 Card (13.56 MHz RF)                               │
  * │       ↓                                                              │
- * │  Read UID + NDEF Data                                               │
+ * │  Baca UID + Data NDEF                                               │
  * │       ↓                                                              │
- * │  Return to App: { id, type, manufacturer }                          │
+ * │  Return ke App: { id, type, manufacturer }                          │
  * │       ↓                                                              │
- * │  Backend API: Validate & Process                                    │
+ * │  Backend API: Validasi & Proses                                     │
  * │                                                                      │
  * └─────────────────────────────────────────────────────────────────────┘
  * 
- * Key Methods:
+ * Method Utama:
  * 
  * 1. initNFC():
- *    - Initialize NFC hardware
- *    - Check device support & enabled status
- *    - Called on app startup
+ *    - Inisialisasi hardware NFC
+ *    - Cek dukungan device & status enabled
+ *    - Dipanggil saat app startup
  * 
  * 2. readPhysicalCard():
- *    - Read physical NTag215 card UID
- *    - Most important method untuk payment flow
- *    - Returns: { id, type, manufacturer }
+ *    - Baca UID dari physical NTag215 card
+ *    - Method terpenting untuk payment flow
+ *    - Return: { id, type, manufacturer }
  * 
  * 3. writePhysicalCard():
- *    - Write NDEF data to card (optional)
- *    - Usually not needed (we only use UID)
- *    - For future features
+ *    - Tulis NDEF data ke card (opsional)
+ *    - Biasanya tidak diperlukan (kita hanya pakai UID)
+ *    - Untuk fitur masa depan
  * 
  * 4. checkNFCEnabled():
- *    - Check NFC enabled in device settings
- *    - Called before NFC operations
+ *    - Cek NFC enabled di device settings
+ *    - Dipanggil sebelum operasi NFC
  * 
  * 5. cleanup():
- *    - Release NFC resources
- *    - Called on component unmount
+ *    - Lepaskan resource NFC
+ *    - Dipanggil saat component unmount
  * 
- * Error Handling:
- * - Device not support NFC: Return false, fallback to manual mode
- * - NFC disabled: Show alert with instructions
- * - Card read error: Return null, prompt retry
- * - Timeout: Cancel after 30 seconds
+ * Penanganan Error:
+ * - Device tidak support NFC: Return false, fallback ke manual mode
+ * - NFC disabled: Tampilkan alert dengan instruksi
+ * - Error baca kartu: Return null, prompt retry
+ * - Timeout: Cancel setelah 30 detik
  * 
- * Security Considerations:
- * - UID is public (can be cloned)
- * - Backend must validate card ownership
- * - Backend check card status (active, blocked)
- * - Backend verify transaction legitimacy
- * - Card balance stored in backend (not on card)
+ * Pertimbangan Keamanan:
+ * - UID bersifat publik (bisa di-clone)
+ * - Backend harus validasi kepemilikan kartu
+ * - Backend cek status kartu (aktif, diblokir)
+ * - Backend verifikasi legitimasi transaksi
+ * - Balance kartu disimpan di backend (tidak di kartu)
  * 
  * ==================================================================================
  */
@@ -128,9 +128,9 @@ export interface NFCData {
   userId: number;                      // ID user yang punya tag NFC ini
   username: string;                    // Username untuk identifikasi
   action: 'payment' | 'receive';       // Aksi: bayar atau terima uang
-  amount?: number;                     // Jumlah uang (optional, bisa di-set later)
+  amount?: number;                     // Jumlah uang (opsional, bisa di-set later)
   cardId?: string;                     // UID dari physical NFC card (NTag215)
-  cardType?: 'virtual' | 'physical';   // Tipe kartu: virtual (phone) atau physical (NTag215)
+  cardType?: 'virtual' | 'physical';   // Tipe kartu: virtual (HP) atau physical (NTag215)
 }
 
 // ============================================================================
@@ -139,11 +139,11 @@ export interface NFCData {
 // Informasi dari physical NFC card (NTag215)
 export interface NFCCardInfo {
   id: string;                          // UID kartu (hex string)
-  type: string;                        // Tag type (NTag215, Mifare, dll)
-  techTypes: string[];                 // Technology types supported
+  type: string;                        // Tipe tag (NTag215, Mifare, dll)
+  techTypes: string[];                 // Teknologi yang didukung
   maxSize: number;                     // Ukuran memory (bytes)
   isWritable: boolean;                 // Apakah bisa ditulis
-  manufacturer: string;                // Manufacturer (NXP untuk NTag215)
+  manufacturer: string;                // Produsen (NXP untuk NTag215)
 }
 
 // ============================================================================
@@ -153,8 +153,9 @@ export interface NFCCardInfo {
 // NFC digunakan untuk pembayaran phone-to-phone tanpa internet
 // Cara kerja: Tempelkan 2 HP, data transfer via NFC tag
 export class NFCService {
-  // Flag to track if NFC request is active
-  private static isRequestActive = false;
+  // Flag untuk track apakah ada NFC request yang sedang berjalan
+  // Mencegah multiple request bersamaan (race condition)
+  private static isRequestActive = false; // Awalnya tidak ada request aktif
   // =========================================================================
   // METHOD: initNFC()
   // =========================================================================
@@ -163,47 +164,48 @@ export class NFCService {
   static async initNFC(): Promise<boolean> {
     try {
       // STEP 1: Cek apakah running di Expo Go atau development mode
-      // Expo Go tidak support native NFC, jadi return false
+      // Expo Go tidak support native module NFC, jadi return false
+      // __DEV__ adalah flag bawaan React Native untuk mode development
       if (__DEV__ && !Platform.select({ android: true, ios: true })) {
-        console.log('📱 NFC not available in Expo Go - using manual payment mode');
-        return false;
+        console.log('📱 NFC not available in Expo Go - using manual payment mode'); // Log info
+        return false; // Return false = NFC tidak tersedia
       }
 
-      // STEP 2: Periksa apakah device support NFC hardware
-      // Tidak semua HP punya chip NFC (terutama HP murah)
-      const supported = await NfcManager.isSupported().catch(() => false);
+      // STEP 2: Periksa apakah device memiliki hardware NFC
+      // Tidak semua smartphone punya chip NFC (terutama HP budget)
+      const supported = await NfcManager.isSupported().catch(() => false); // Fallback false jika error
       if (!supported) {
-        console.log('📱 NFC not supported on this device - using manual payment mode');
-        return false;
+        console.log('📱 NFC not supported on this device - using manual payment mode'); // Log info
+        return false; // Device tidak punya NFC chip
       }
 
-      // STEP 3: Coba start NFC manager
+      // STEP 3: Coba start NFC manager service
       try {
-        // Start NFC service
-        await NfcManager.start();
+        // Inisialisasi NFC service dari react-native-nfc-manager
+        await NfcManager.start(); // Aktivasi hardware NFC
         
-        // STEP 4: Cek apakah NFC enabled di settings device
-        // User bisa matikan NFC di settings Android/iOS
-        const enabled = await NfcManager.isEnabled().catch(() => false);
+        // STEP 4: Cek apakah user sudah mengaktifkan NFC di pengaturan
+        // User bisa punya hardware tapi NFC-nya dimatikan manual
+        const enabled = await NfcManager.isEnabled().catch(() => false); // Fallback false
         
         if (!enabled) {
-          console.log('⚠️ NFC is disabled in device settings');
-          return false;
+          console.log('⚠️ NFC is disabled in device settings'); // Log peringatan
+          return false; // NFC ada tapi tidak aktif
         }
         
-        console.log('✅ NFC Initialized successfully');
-        return true;
+        console.log('✅ NFC Initialized successfully'); // Log sukses
+        return true; // Sukses: NFC siap dipakai
         
       } catch (startError: any) {
-        // Error saat start (biasa terjadi di emulator atau Expo Go)
-        console.log('⚠️ NFC start failed (Expo Go/Emulator):', startError?.message || 'Not available');
-        return false;
+        // Error saat start biasanya terjadi di emulator atau Expo Go
+        console.log('⚠️ NFC start gagal (Expo Go/Emulator):', startError?.message || 'Tidak tersedia'); // Log warning
+        return false; // Gagal start NFC service
       }
       
     } catch (error: any) {
-      // Catch all error lainnya
-      console.log('❌ NFC Init Error:', error?.message || 'Not available in development mode');
-      return false;
+      // Catch error umum yang tidak terduga
+      console.log('❌ Error Inisialisasi NFC:', error?.message || 'Tidak tersedia dalam development mode'); // Log error
+      return false; // Return false = init gagal
     }
   }
 
@@ -215,13 +217,14 @@ export class NFCService {
   // Return: true jika enabled, false jika disabled
   static async checkNFCEnabled(): Promise<boolean> {
     try {
-      // Query status NFC dari device
-      const enabled = await NfcManager.isEnabled();
-      return !!enabled;  // Convert ke boolean (!! = double negation)
+      // Query status NFC dari device operating system
+      // isEnabled() check apakah NFC toggle ON di pengaturan
+      const enabled = await NfcManager.isEnabled(); // Await karena operasi async
+      return !!enabled;  // Convert ke boolean dengan double negation (!!, untuk safety)
     } catch (error) {
-      // Kalau ada error (misal device tidak support NFC), return false
-      console.log('NFC Check Error:', error);
-      return false;
+      // Jika ada error (misal device tidak support NFC), return false
+      console.log('Error Cek NFC:', error); // Log error untuk debugging
+      return false; // Default: anggap disabled
     }
   }
 
@@ -264,7 +267,7 @@ export class NFCService {
       // - Tag tidak compatible (read-only tag)
       // - Tag tidak ditempel cukup lama
       // - Tag rusak
-      console.log('NFC Write Error:', error);
+      console.log('Error Tulis NFC:', error);
       return false;
       
     } finally {
@@ -284,28 +287,28 @@ export class NFCService {
   // Output: NFCData jika berhasil read, null jika gagal/kosong
   static async readNFCData(): Promise<NFCData | null> {
     try {
-      // Check if another request is active
+      // Cek apakah ada request yang sedang aktif
       if (this.isRequestActive) {
-        console.log('⚠️ NFC request already in progress');
+        console.log('⚠️ Request NFC sedang berlangsung');
         return null;
       }
 
       this.isRequestActive = true;
 
-      // STEP 1: Cancel any previous request first
+      // STEP 1: Cancel request sebelumnya jika ada
       try {
         await NfcManager.cancelTechnologyRequest();
       } catch (e) {
-        // Ignore if no request to cancel
+        // Abaikan jika tidak ada request untuk di-cancel
       }
 
-      // STEP 2: Request akses ke NFC technology (NDEF format)
+      // STEP 2: Request akses ke teknologi NFC (format NDEF)
       await NfcManager.requestTechnology(NfcTech.Ndef, {
         alertMessage: 'Dekatkan HP ke NFC tag...'
       });
       
       // STEP 3: Ambil tag yang terdeteksi
-      // getTag() akan return object tag dengan semua data
+      // getTag() akan return objek tag dengan semua data
       const tag = await NfcManager.getTag();
 
       // STEP 4: Validasi tag
@@ -324,13 +327,13 @@ export class NFCService {
       }
 
       // STEP 6: Decode payload
-      // Payload format NDEF text record:
-      // - Byte 0: Status byte (encoding + language length)
-      // - Byte 1-2: Language code (contoh: "en")
-      // - Byte 3+: Actual text data (JSON string kita)
+      // Format payload NDEF text record:
+      // - Byte 0: Status byte (encoding + panjang bahasa)
+      // - Byte 1-2: Kode bahasa (contoh: "en")
+      // - Byte 3+: Data teks sebenarnya (JSON string kita)
       const payload = ndefRecord.payload;
       
-      // Skip 3 bytes pertama (status + language prefix)
+      // Skip 3 bytes pertama (status + prefix bahasa)
       // Convert sisanya jadi string
       const text = String.fromCharCode(...payload.slice(3));
       
@@ -343,9 +346,9 @@ export class NFCService {
     } catch (error) {
       // Error bisa terjadi karena:
       // - Tag tidak punya data NDEF
-      // - Data corrupt/tidak valid JSON
+      // - Data rusak/tidak valid JSON
       // - Tag tidak ditempel cukup lama
-      console.log('NFC Read Error:', error);
+      console.log('Error Baca NFC:', error);
       return null;
       
     } finally {
@@ -353,7 +356,7 @@ export class NFCService {
       try {
         await NfcManager.cancelTechnologyRequest();
       } catch (cancelError) {
-        // Ignore cancel errors
+        // Abaikan error cancel
       }
       this.isRequestActive = false;
     }
@@ -362,12 +365,12 @@ export class NFCService {
   // =========================================================================
   // METHOD: startNFCScanning()
   // =========================================================================
-  // Start continuous NFC scanning (loop terus sampai tag terdeteksi)
+  // Mulai continuous NFC scanning (loop terus sampai tag terdeteksi)
   // Digunakan di screen "Bayar" untuk terus scan tag penerima
   // 
   // Input:
   //   - onTagDetected: Callback function yang dipanggil saat tag terdeteksi
-  //   - onError: Callback untuk handle error (optional)
+  //   - onError: Callback untuk handle error (opsional)
   static async startNFCScanning(
     onTagDetected: (data: NFCData | null) => void,
     onError?: (error: any) => void
@@ -382,25 +385,25 @@ export class NFCService {
           // Kalau ada data, panggil callback
           if (data) onTagDetected(data);
         } catch (error) {
-          console.log('Error reading NFC data:', error);
+          console.log('Error membaca data NFC:', error);
         }
       };
 
       // STEP 2: Setup interval untuk scan berulang
       // Scan setiap 1.5 detik (1500ms)
-      // Tidak terlalu cepat (hemat battery) tapi cukup responsive
+      // Tidak terlalu cepat (hemat baterai) tapi cukup responsif
       const interval = setInterval(scanForTag, 1500);
       
       // STEP 3: Simpan interval ID untuk bisa di-stop nanti
       // Simpan di class property (hack dengan type any)
       (this as any)._scanInterval = interval;
       
-      console.log('✅ NFC Scanning started...');
+      console.log('✅ Scanning NFC dimulai...');
       
     } catch (error) {
-      console.log('NFC Scanning Error:', error);
+      console.log('Error Scanning NFC:', error);
       
-      // Cleanup: Clear interval jika ada error untuk prevent memory leak
+      // Cleanup: Clear interval jika ada error untuk mencegah memory leak
       if ((this as any)._scanInterval) {
         clearInterval((this as any)._scanInterval);
         (this as any)._scanInterval = null;
@@ -434,20 +437,20 @@ export class NFCService {
       // STEP 4: Cancel technology request (release NFC resource)
       try {
         await NfcManager.cancelTechnologyRequest();
-        console.log('✅ NFC technology request cancelled');
+        console.log('✅ Request teknologi NFC dibatalkan');
       } catch (cancelError) {
-        // Ignore cancel errors (might not be active)
-        console.log('ℹ️ No active NFC request to cancel');
+        // Abaikan error cancel (mungkin tidak ada yang aktif)
+        console.log('ℹ️ Tidak ada request NFC aktif untuk dibatalkan');
       }
 
-      // STEP 5: Reset request active flag
+      // STEP 5: Reset flag request active
       this.isRequestActive = false;
       
-      console.log('✅ NFC scanning stopped successfully');
+      console.log('✅ Scanning NFC berhasil dihentikan');
       
     } catch (error) {
-      console.log('⚠️ Stop NFC Scanning Error:', error);
-      // Force reset flag even on error
+      console.log('⚠️ Error Hentikan Scanning NFC:', error);
+      // Paksa reset flag meski ada error
       this.isRequestActive = false;
     }
   }
@@ -455,18 +458,18 @@ export class NFCService {
   // =========================================================================
   // METHOD: enableP2P()
   // =========================================================================
-  // Enable Peer-to-Peer mode untuk NFC
-  // P2P = Phone-to-Phone communication (tanpa tag fisik)
-  // NOTE: Fitur ini advanced, untuk skripsi mungkin tidak perlu dipakai
+  // Aktifkan mode Peer-to-Peer untuk NFC
+  // P2P = Komunikasi Phone-to-Phone (tanpa tag fisik)
+  // CATATAN: Fitur ini advanced, untuk skripsi mungkin tidak perlu dipakai
   static async enableP2P(): Promise<void> {
     try {
-      // Request 2 technology sekaligus:
-      // - Ndef: Untuk data exchange
-      // - IsoDep: Untuk communication protocol
+      // Request 2 teknologi sekaligus:
+      // - Ndef: Untuk pertukaran data
+      // - IsoDep: Untuk protokol komunikasi
       await NfcManager.requestTechnology([NfcTech.Ndef, NfcTech.IsoDep]);
-      console.log('✅ P2P mode enabled.');
+      console.log('✅ Mode P2P diaktifkan.');
     } catch (error) {
-      console.log('Enable P2P Error:', error);
+      console.log('Error Aktifkan P2P:', error);
     }
   }
 
@@ -479,28 +482,28 @@ export class NFCService {
   // Output: NFCCardInfo dengan UID dan detail kartu
   static async readPhysicalCard(): Promise<NFCCardInfo | null> {
     try {
-      // Check if another request is active
+      // Cek apakah ada request yang sedang aktif
       if (this.isRequestActive) {
-        console.log('⚠️ NFC request already in progress');
+        console.log('⚠️ Request NFC sedang berlangsung');
         return null;
       }
 
       this.isRequestActive = true;
 
-      // Cancel any previous request first
+      // Cancel request sebelumnya jika ada
       try {
         await NfcManager.cancelTechnologyRequest();
       } catch (e) {
-        // Ignore
+        // Abaikan
       }
 
-      // Request NFC technology (NfcA untuk NTag215)
-      // NTag215 menggunakan ISO14443A protocol
+      // Request teknologi NFC (NfcA untuk NTag215)
+      // NTag215 menggunakan protokol ISO14443A
       await NfcManager.requestTechnology(NfcTech.NfcA, {
         alertMessage: 'Dekatkan kartu NFC ke HP...'
       });
       
-      // Get tag info with 30 second timeout
+      // Ambil info tag dengan timeout 30 detik
       const tag = await Promise.race([
         NfcManager.getTag(),
         new Promise((_, reject) => 
@@ -518,44 +521,44 @@ export class NFCService {
       const uidBytes = tag.id as any;
       const cardId = Array.isArray(uidBytes) ? this.bytesToHexString(uidBytes) : String(uidBytes);
 
-      // Get tech types
+      // Ambil tipe teknologi
       const techTypes = tag.techTypes || [];
 
-      // Detect card type
-      let cardType = 'Unknown';
+      // Deteksi tipe kartu
+      let cardType = 'Tidak Diketahui';
       if (techTypes.includes('android.nfc.tech.NfcA') || 
           techTypes.includes('android.nfc.tech.MifareUltralight')) {
-        cardType = 'NTag215'; // Most likely NTag215
+        cardType = 'NTag215'; // Kemungkinan besar NTag215
       }
 
-      // Get manufacturer from UID (first byte)
+      // Ambil produsen dari UID (byte pertama)
       const manufacturerId = typeof uidBytes[0] === 'number' ? uidBytes[0] : parseInt(uidBytes[0] as any);
-      let manufacturer = 'Unknown';
+      let manufacturer = 'Tidak Diketahui';
       if (manufacturerId === 4) {
-        manufacturer = 'NXP Semiconductors'; // NTag215 manufacturer
+        manufacturer = 'NXP Semiconductors'; // Produsen NTag215
       }
 
       const cardInfo: NFCCardInfo = {
         id: cardId,
         type: cardType,
         techTypes,
-        maxSize: tag.maxSize || 888, // NTag215 has 888 bytes
-        isWritable: true, // Assume writable for NTag215
+        maxSize: tag.maxSize || 888, // NTag215 punya 888 bytes
+        isWritable: true, // Asumsi bisa ditulis untuk NTag215
         manufacturer
       };
 
-      console.log('✅ Physical Card Read:', cardInfo);
+      console.log('✅ Kartu Fisik Terbaca:', cardInfo);
       return cardInfo;
       
     } catch (error) {
-      console.log('Physical Card Read Error:', error);
+      console.log('Error Baca Kartu Fisik:', error);
       return null;
       
     } finally {
       try {
         await NfcManager.cancelTechnologyRequest();
       } catch (e) {
-        // Ignore
+        // Abaikan
       }
       this.isRequestActive = false;
     }
@@ -567,14 +570,14 @@ export class NFCService {
   // Membaca UID dan NDEF data dari physical card sekaligus
   // Untuk kartu yang sudah ada datanya (sudah di-write sebelumnya)
   // 
-  // Output: Object dengan cardInfo dan nfcData
+  // Output: Objek dengan cardInfo dan nfcData
   static async readPhysicalCardWithData(): Promise<{
     cardInfo: NFCCardInfo;
     nfcData: NFCData | null;
   } | null> {
     try {
       if (this.isRequestActive) {
-        console.log('⚠️ NFC request already in progress');
+        console.log('⚠️ Request NFC sedang berlangsung');
         return null;
       }
 
@@ -583,10 +586,10 @@ export class NFCService {
       try {
         await NfcManager.cancelTechnologyRequest();
       } catch (e) {
-        // Ignore
+        // Abaikan
       }
 
-      // Request multiple technologies untuk read UID dan NDEF
+      // Request multiple teknologi untuk baca UID dan NDEF
       await NfcManager.requestTechnology([NfcTech.NfcA, NfcTech.Ndef], {
         alertMessage: 'Dekatkan kartu NFC ke HP...'
       });
@@ -598,19 +601,19 @@ export class NFCService {
         return null;
       }
 
-      // Extract card info (UID, type, etc)
+      // Ekstrak info kartu (UID, type, dll)
       const uidBytes = tag.id as any;
       const cardId = Array.isArray(uidBytes) ? this.bytesToHexString(uidBytes) : String(uidBytes);
       const techTypes = tag.techTypes || [];
 
-      let cardType = 'Unknown';
+      let cardType = 'Tidak Diketahui';
       if (techTypes.includes('android.nfc.tech.NfcA') || 
           techTypes.includes('android.nfc.tech.MifareUltralight')) {
         cardType = 'NTag215';
       }
 
       const manufacturerId = typeof uidBytes[0] === 'number' ? uidBytes[0] : (Array.isArray(uidBytes) ? uidBytes[0] : 0);
-      let manufacturer = 'Unknown';
+      let manufacturer = 'Tidak Diketahui';
       if (manufacturerId === 4) {
         manufacturer = 'NXP Semiconductors';
       }
@@ -624,7 +627,7 @@ export class NFCService {
         manufacturer
       };
 
-      // Try to read NDEF data
+      // Coba baca NDEF data
       let nfcData: NFCData | null = null;
       if (tag.ndefMessage && tag.ndefMessage.length > 0) {
         try {
@@ -634,29 +637,29 @@ export class NFCService {
             const text = String.fromCharCode(...payload.slice(3));
             nfcData = JSON.parse(text);
             
-            // Add card ID to data
+            // Tambahkan card ID ke data
             if (nfcData) {
               nfcData.cardId = cardId;
               nfcData.cardType = 'physical';
             }
           }
         } catch (parseError) {
-          console.warn('⚠️ Could not parse NDEF data:', parseError);
+          console.warn('⚠️ Tidak bisa parse NDEF data:', parseError);
         }
       }
 
-      console.log('✅ Physical Card with Data:', { cardInfo, nfcData });
+      console.log('✅ Kartu Fisik dengan Data:', { cardInfo, nfcData });
       return { cardInfo, nfcData };
       
     } catch (error) {
-      console.log('Physical Card Read Error:', error);
+      console.log('Error Baca Kartu Fisik:', error);
       return null;
       
     } finally {
       try {
         await NfcManager.cancelTechnologyRequest();
       } catch (e) {
-        // Ignore
+        // Abaikan
       }
       this.isRequestActive = false;
     }
@@ -665,11 +668,11 @@ export class NFCService {
   // =========================================================================
   // METHOD: writePhysicalCard()
   // =========================================================================
-  // Write data ke physical NFC card (NTag215)
+  // Tulis data ke physical NFC card (NTag215)
   // Sama seperti writeNFCData() tapi dengan validasi tambahan untuk physical card
   // 
   // Input: NFCData yang akan ditulis ke kartu
-  // Output: Object dengan success status dan card ID
+  // Output: Objek dengan status success dan card ID
   static async writePhysicalCard(data: NFCData): Promise<{
     success: boolean;
     cardId?: string;
@@ -679,7 +682,7 @@ export class NFCService {
       if (this.isRequestActive) {
         return {
           success: false,
-          message: 'NFC request already in progress'
+          message: 'Request NFC sedang berlangsung'
         };
       }
 
@@ -688,33 +691,33 @@ export class NFCService {
       try {
         await NfcManager.cancelTechnologyRequest();
       } catch (e) {
-        // Ignore
+        // Abaikan
       }
 
-      // Request Ndef technology untuk write
+      // Request teknologi Ndef untuk write
       await NfcManager.requestTechnology(NfcTech.Ndef, {
         alertMessage: 'Dekatkan kartu NFC untuk menulis data...'
       });
       
-      // Get tag untuk ambil UID
+      // Ambil tag untuk mendapat UID
       const tag = await NfcManager.getTag();
       const cardId = tag?.id ? (Array.isArray(tag.id) ? this.bytesToHexString(tag.id) : String(tag.id)) : undefined;
 
-      // Add card info to data
+      // Tambahkan info kartu ke data
       const dataToWrite = {
         ...data,
         cardId,
         cardType: 'physical' as const
       };
 
-      // Encode and write
+      // Encode dan tulis
       const bytes = Ndef.encodeMessage([
         Ndef.textRecord(JSON.stringify(dataToWrite))
       ]);
 
       if (bytes) {
         await NfcManager.ndefHandler.writeNdefMessage(bytes);
-        console.log('✅ Physical Card Written:', dataToWrite);
+        console.log('✅ Kartu Fisik Berhasil Ditulis:', dataToWrite);
         
         return {
           success: true,
@@ -729,7 +732,7 @@ export class NFCService {
       };
       
     } catch (error: any) {
-      console.log('Physical Card Write Error:', error);
+      console.log('Error Tulis Kartu Fisik:', error);
       return {
         success: false,
         message: error?.message || 'Gagal menulis ke kartu'
@@ -739,7 +742,7 @@ export class NFCService {
       try {
         await NfcManager.cancelTechnologyRequest();
       } catch (e) {
-        // Ignore
+        // Abaikan
       }
       this.isRequestActive = false;
     }
@@ -774,15 +777,15 @@ export class NFCService {
       try {
         NfcManager.cancelTechnologyRequest();
       } catch (cancelError) {
-        // Ignore cancel errors
+        // Abaikan error cancel
       }
 
-      // Reset request active flag
+      // Reset flag request active
       this.isRequestActive = false;
       
-      console.log('🧹 NFC resources cleaned up.');
+      console.log('🧹 Resource NFC berhasil dibersihkan.');
     } catch (error) {
-      console.log('NFC Cleanup Error:', error);
+      console.log('Error Cleanup NFC:', error);
     }
   }
 }

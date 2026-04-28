@@ -1,87 +1,87 @@
 // src/hooks/usePayment.ts
 /* ==================================================================================
- * 💳 CUSTOM HOOK: usePayment
+ * 💳 HOOK KUSTOM: usePayment
  * ==================================================================================
  * 
  * Tujuan Hook:
- * Custom React hook untuk handle complex payment processing logic dengan physical NFC cards.
- * Implement merchant payment flow: Penjual scan kartu Pembeli untuk terima bayaran.
+ * Hook React kustom untuk menangani logika proses pembayaran kompleks dengan kartu NFC fisik.
+ * Implementasi alur pembayaran pedagang: Penjual scan kartu Pembeli untuk terima bayaran.
  * 
- * Business Flow:
+ * Alur Bisnis:
  * ┌─────────────────────────────────────────────────────────────────────┐
- * │ MERCHANT PAYMENT SCENARIO:                                          │
+ * │ SKENARIO PEMBAYARAN PEDAGANG:                                          │
  * │                                                                   │
- * │ 1. Penjual (Merchant) input amount Rp 50.000                      │
- * │ 2. Penjual tap button "Terima Pembayaran"                         │
- * │ 3. Alert muncul: "Scan Kartu Pembeli"                             │
+ * │ 1. Penjual (Pedagang) input jumlah Rp 50.000                      │
+ * │ 2. Penjual ketuk tombol "Terima Pembayaran"                       │
+ * │ 3. Peringatan muncul: "Scan Kartu Pembeli"                        │
  * │ 4. Pembeli dekatkan kartu NFC ke HP Penjual                       │
- * │ 5. System baca UID kartu Pembeli                                  │
- * │ 6. System validate: registered? active? saldo cukup?              │
- * │ 7. System ambil kartu Penjual dari database (auto-detect)         │
- * │ 8. System proses payment: Pembeli → Penjual                      │
- * │ 9. Backend update balances + fraud check                          │
- * │ 10. Alert success dengan info transaksi                           │
+ * │ 5. Sistem baca UID kartu Pembeli                                  │
+ * │ 6. Sistem validasi: terdaftar? aktif? saldo cukup?              │
+ * │ 7. Sistem ambil kartu Penjual dari database (deteksi otomatis)    │
+ * │ 8. Sistem proses pembayaran: Pembeli → Penjual                   │
+ * │ 9. Backend perbarui saldo + cek penipuan                          │
+ * │ 10. Peringatan sukses dengan info transaksi                       │
  * └─────────────────────────────────────────────────────────────────────┘
  * 
- * Key Features:
- * 1. Physical Card Scanning: Read NFC card dari Pembeli
- * 2. Multi-level Validation:
- *    - Buyer card registered & active
- *    - Buyer balance sufficient
- *    - Prevent self-payment
- *    - Receiver card exists & active
- * 3. Auto-detect Receiver Card: Ambil dari database (no manual scan)
- * 4. Fraud Detection Integration: Check fraud score after payment
- * 5. Balance Refresh: Update balance automatically after success
- * 6. Comprehensive Error Handling:
- *    - User cancellation
- *    - Network errors
- *    - Rate limiting (429)
- *    - Account banned
- *    - Insufficient balance
- *    - Card not found/inactive
+ * Fitur Utama:
+ * 1. Pemindaian Kartu Fisik: Baca kartu NFC dari Pembeli
+ * 2. Validasi Multi-tingkat:
+ *    - Kartu pembeli terdaftar & aktif
+ *    - Saldo pembeli mencukupi
+ *    - Mencegah pembayaran diri sendiri
+ *    - Kartu penerima ada & aktif
+ * 3. Deteksi Otomatis Kartu Penerima: Ambil dari database (tanpa scan manual)
+ * 4. Integrasi Deteksi Penipuan: Cek skor penipuan setelah pembayaran
+ * 5. Penyegaran Saldo: Perbarui saldo otomatis setelah sukses
+ * 6. Penanganan Error Menyeluruh:
+ *    - Pembatalan oleh pengguna
+ *    - Kesalahan jaringan
+ *    - Pembatasan laju permintaan (429)
+ *    - Akun diblokir
+ *    - Saldo tidak cukup
+ *    - Kartu tidak ditemukan/tidak aktif
  * 
- * Payment Flow Diagram:
+ * Diagram Alur Pembayaran:
  * ┌─────────────────────────────────────────────────────────────────────┐
- * │ USER INPUT                                                        │
+ * │ MASUKAN PENGGUNA                                                     │
  * │   ↓                                                             │
- * │ CONFIRM ALERT ("Scan Kartu Pembeli") ──> User Cancel? ──> STOP  │
- * │   ↓ User clicks "Siap"                                          │
- * │ SCAN BUYER CARD (NFC Hardware) ──> Failed? ──> STOP            │
+ * │ KONFIRMASI PERINGATAN ("Scan Kartu Pembeli") ──> Batal? ──> BERHENTI │
+ * │   ↓ Pengguna klik "Siap"                                       │
+ * │ SCAN KARTU PEMBELI (Perangkat NFC) ──> Gagal? ──> BERHENTI     │
  * │   ↓                                                             │
- * │ VALIDATE BUYER CARD (API) ──> Not registered? ──> STOP        │
- * │   ↓                          ─> Not active? ──> STOP           │
- * │   ↓                          ─> Self-payment? ──> STOP          │
- * │   ↓                          ─> Insufficient balance? ──> STOP   │
- * │ GET RECEIVER CARD (API) ──> No cards? ──> STOP                 │
- * │   ↓                      ─> No active card? ──> STOP            │
- * │ PROCESS PAYMENT (Backend API)                                    │
+ * │ VALIDASI KARTU PEMBELI (API) ──> Tidak terdaftar? ──> BERHENTI │
+ * │   ↓                          ─> Tidak aktif? ──> BERHENTI      │
+ * │   ↓                          ─> Bayar sendiri? ──> BERHENTI    │
+ * │   ↓                          ─> Saldo kurang? ──> BERHENTI     │
+ * │ AMBIL KARTU PENERIMA (API) ──> Tidak ada kartu? ──> BERHENTI  │
+ * │   ↓                        ─> Tidak ada kartu aktif? ──> BERHENTI│
+ * │ PROSES PEMBAYARAN (API Backend)                                  │
  * │   ↓                                                             │
- * │ CHECK FRAUD SCORE:                                               │
- * │   - Score > 60: BLOCKED (Alert error)                            │
- * │   - Score 40-60: REVIEW (Alert warning)                          │
- * │   - Score < 40: SUCCESS (Alert success)                          │
+ * │ CEK SKOR PENIPUAN:                                              │
+ * │   - Skor > 60: DIBLOKIR (Peringatan error)                      │
+ * │   - Skor 40-60: DITINJAU (Peringatan warning)                   │
+ * │   - Skor < 40: SUKSES (Peringatan sukses)                       │
  * │   ↓                                                             │
- * │ REFRESH BALANCE (onSuccess callback)                             │
+ * │ SEGARKAN SALDO (callback onSuccess)                             │
  * │   ↓                                                             │
- * │ SHOW SUCCESS ALERT                                               │
+ * │ TAMPILKAN PERINGATAN SUKSES                                     │
  * └─────────────────────────────────────────────────────────────────────┘
  * 
- * State Management:
- * - isProcessing: boolean flag untuk prevent concurrent payments (locking)
+ * Manajemen State:
+ * - isProcessing: flag boolean untuk mencegah pembayaran bersamaan (penguncian)
  * 
- * Usage Example:
+ * Contoh Penggunaan:
  * ```tsx
  * const { processTapToPayTransfer, isProcessing } = usePayment();
  * 
  * const handleReceivePayment = async () => {
  *   const success = await processTapToPayTransfer(
  *     currentUserId,
- *     50000, // amount in Rupiah
- *     refreshBalance // callback to refresh balance UI
+ *     50000, // jumlah dalam Rupiah
+ *     refreshBalance // callback untuk segarkan saldo UI
  *   );
  *   if (success) {
- *     // Navigate to success screen
+ *     // Navigasi ke layar sukses
  *   }
  * };
  * ```
@@ -97,59 +97,56 @@ import { apiService } from '../utils/apiService';
 /* ==================================================================================
  * HOOK: usePayment
  * ==================================================================================
- * RETURN:
- * - isProcessing: boolean - Flag apakah payment sedang diproses
- * - processTapToPayTransfer: Function - Main payment processing function
+ * HASIL KEMBALIAN:
+ * - isProcessing: boolean - Flag apakah pembayaran sedang diproses
+ * - processTapToPayTransfer: Fungsi - Fungsi pemrosesan pembayaran utama
  * ==================================================================================
  */
 export const usePayment = () => {
-  // STATE: isProcessing
-  // Flag untuk prevent concurrent payments (locking mechanism)
-  // Use case:
-  // - Disable payment button saat processing
-  // - Show loading indicator
-  // - Prevent user tap button multiple times
-  // Pattern: Same as isScanning di useNFCScanner
-  const [isProcessing, setIsProcessing] = useState(false);
+  // STATE: isProcessing - Flag kunci untuk mencegah pembayaran ganda
+  // true = pembayaran sedang diproses, tombol dinonaktifkan
+  // false = siap proses pembayaran baru
+  // Penting untuk mencegah pengguna mengetuk tombol bayar berkali-kali
+  const [isProcessing, setIsProcessing] = useState(false); // Awalnya tidak aktif
 
   /* ================================================================================
-   * FUNCTION: processTapToPayTransfer
+   * FUNGSI: processTapToPayTransfer
    * ================================================================================
-   * Main function untuk proses pembayaran dengan physical NFC cards.
-   * Implement merchant payment flow: Penjual scan kartu Pembeli untuk terima bayaran.
+   * Fungsi utama untuk proses pembayaran dengan kartu NFC fisik.
+   * Implementasi alur pembayaran pedagang: Penjual scan kartu Pembeli untuk terima bayaran.
    * 
-   * PARAMETERS:
-   * @param currentUserId - number - ID user yang login (penjual/merchant)
-   * @param amount - number - Jumlah payment dalam Rupiah
-   * @param onSuccess - Function (optional) - Callback untuk refresh balance after success
+   * PARAMETER:
+   * @param currentUserId - nomor - ID pengguna yang login (penjual/pedagang)
+   * @param amount - nomor - Jumlah pembayaran dalam Rupiah
+   * @param onSuccess - Fungsi (opsional) - Callback untuk segarkan saldo setelah sukses
    * 
-   * RETURN:
-   * @returns Promise<boolean> - true jika payment berhasil, false jika gagal
+   * HASIL KEMBALIAN:
+   * @returns Promise<boolean> - true jika pembayaran berhasil, false jika gagal
    * 
-   * FLOW DETAILS (8 MAJOR STEPS):
+   * DETAIL ALUR (8 LANGKAH UTAMA):
    * 
-   * STEP 1: User Confirmation Alert
-   *   - Show alert "Scan Kartu Pembeli"
-   *   - Button: "Batal" (reject) dan "Siap" (resolve)
-   *   - User bisa cancel sebelum scan
+   * LANGKAH 1: Peringatan Konfirmasi Pengguna
+   *   - Tampilkan peringatan "Scan Kartu Pembeli"
+   *   - Tombol: "Batal" (tolak) dan "Siap" (setuju)
+   *   - Pengguna bisa membatalkan sebelum scan
    * 
-   * STEP 2: Scan Buyer Card (Physical NFC)
-   *   - Call NFCService.readPhysicalCard()
-   *   - Read UID dari kartu pembeli
-   *   - Validate card terbaca
+   * LANGKAH 2: Scan Kartu Pembeli (NFC Fisik)
+   *   - Panggil NFCService.readPhysicalCard()
+   *   - Baca UID dari kartu pembeli
+   *   - Validasi kartu terbaca
    * 
-   * STEP 3: Validate Buyer Card (Backend API)
+   * LANGKAH 3: Validasi Kartu Pembeli (API Backend)
    *   - API: GET /api/nfc-cards/info/{cardId}
-   *   - Check: registered? active? owner?
-   *   - Validate: not self-payment
-   *   - Check: balance sufficient
+   *   - Cek: terdaftar? aktif? pemilik?
+   *   - Validasi: bukan bayar sendiri
+   *   - Cek: saldo mencukupi
    * 
-   * STEP 4: Get Receiver Card (Auto-detect)
+   * LANGKAH 4: Ambil Kartu Penerima (Deteksi Otomatis)
    *   - API: GET /api/users/{userId}/cards
-   *   - Find ACTIVE card dari penjual
-   *   - No manual scan needed (berbeda dari buyer)
+   *   - Temukan kartu AKTIF dari penjual
+   *   - Tidak perlu scan manual (berbeda dari pembeli)
    * 
-   * STEP 5: Process Payment (Backend)
+   * LANGKAH 5: Proses Pembayaran (Backend)
    *   - API: POST /api/nfc-cards/payment
    *   - Transfer: buyer balance -> receiver balance
    *   - Create transaction record
@@ -186,9 +183,9 @@ export const usePayment = () => {
     amount: number,
     onSuccess?: () => void
   ): Promise<boolean> => {
-    // Lock payment processing dengan set isProcessing = true
-    // Prevent concurrent payments (same pattern as useNFCScanner)
-    setIsProcessing(true);
+    // Aktifkan lock agar function ini tidak bisa dipanggil lagi sampai selesai
+    // Mencegah race condition jika user tap tombol berkali-kali
+    setIsProcessing(true); // Lock ON
 
     try {
       // STEP 1: User Confirmation Alert

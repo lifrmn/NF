@@ -8,30 +8,30 @@
  * Component ini adalah reusable button dengan berbagai variant dan size.
  * Digunakan di seluruh aplikasi untuk consistency UI dan reduce code duplication.
  * 
- * Features:
- * 1. Variants: Primary (blue), Secondary (green), Link (transparent/no background)
- * 2. Sizes: Small, Medium, Large (different padding and font size)
- * 3. States: Normal, Disabled, Loading (with spinner)
+ * Fitur:
+ * 1. Variants: Primary (biru), Secondary (hijau), Link (transparan/tanpa background)
+ * 2. Sizes: Small, Medium, Large (padding dan font size berbeda)
+ * 3. States: Normal, Disabled, Loading (dengan spinner)
  * 4. Accessibility: accessibilityRole, accessibilityLabel, hitSlop
  * 5. Error Handling: Try-catch untuk prevent app crash jika onPress error
- * 6. Debug Logging: Console logs untuk track button interactions
+ * 6. Debug Logging: Console logs untuk track interaksi button
  * 
  * Props:
- * - title: string - Text yang ditampilkan di button
+ * - title: string - Teks yang ditampilkan di button
  * - onPress: () => void - Function yang dipanggil saat button di-tap
- * - style: ViewStyle (optional) - Custom style untuk override default
- * - textStyle: TextStyle (optional) - Custom text style
- * - disabled: boolean (optional) - Disable button (gray out, tidak bisa di-tap)
- * - loading: boolean (optional) - Show loading spinner instead of text
+ * - style: ViewStyle (opsional) - Custom style untuk override default
+ * - textStyle: TextStyle (opsional) - Custom text style
+ * - disabled: boolean (opsional) - Disable button (gray out, tidak bisa di-tap)
+ * - loading: boolean (opsional) - Tampilkan loading spinner sebagai ganti text
  * - variant: 'primary' | 'secondary' | 'link' (default: 'primary')
  * - size: 'small' | 'medium' | 'large' (default: 'medium')
  * 
- * Usage Examples:
+ * Contoh Penggunaan:
  * ```tsx
  * // Primary button (default)
  * <CustomButton title="Login" onPress={handleLogin} />
  * 
- * // Secondary button with loading state
+ * // Secondary button dengan loading state
  * <CustomButton 
  *   title="Register" 
  *   onPress={handleRegister}
@@ -39,9 +39,9 @@
  *   loading={isRegistering}
  * />
  * 
- * // Link button (no background, for secondary actions)
+ * // Link button (tanpa background, untuk aksi sekunder)
  * <CustomButton 
- *   title="Forgot Password?" 
+ *   title="Lupa Password?" 
  *   onPress={handleForgotPassword}
  *   variant="link"
  *   size="small"
@@ -98,15 +98,15 @@ interface CustomButtonProps {
  * ==================================================================================
  */
 export default function CustomButton({
-  // STEP 1: Destructure props dengan default values
-  title,
-  onPress,
-  style,
-  textStyle,
-  disabled = false,      // Default: button enabled
-  loading = false,       // Default: not loading
-  variant = 'primary',   // Default: blue button
-  size = 'medium',       // Default: medium size
+  // Destructure props dengan default values untuk prop yang opsional
+  title,               // Wajib: text yang ditampilkan di button
+  onPress,             // Wajib: callback saat button di-tap
+  style,               // Opsional: custom style container
+  textStyle,           // Opsional: custom style text
+  disabled = false,    // Opsional: default false (button aktif)
+  loading = false,     // Opsional: default false (tidak loading)
+  variant = 'primary', // Opsional: default biru (primary)
+  size = 'medium',     // Opsional: default medium size
 }: CustomButtonProps) {
   
   /* ================================================================================
@@ -128,30 +128,27 @@ export default function CustomButton({
    * ================================================================================
    */
   const handlePress = () => {
-    // STEP 1: Log button press untuk debugging
+    // Log untuk debugging: track setiap kali button di-tap
     console.log('🔘 CustomButton pressed:', title, 'disabled:', disabled, 'loading:', loading);
     
-    // STEP 2: Validate apakah button bisa di-press
-    // Button tidak bisa di-press jika:
-    // - disabled = true (button manually disabled)
-    // - loading = true (sedang loading)
-    // - onPress undefined (no callback provided)
+    // Validasi: button hanya bisa di-press jika tidak disabled, tidak loading, dan punya callback
+    // Triple check untuk keamanan: disabled, loading, dan onPress defined
     if (!disabled && !loading && onPress) {
       try {
-        // STEP 3: Call onPress callback
-        onPress();
+        // Panggil callback yang diberikan oleh parent component
+        onPress(); // Execute function
         
-        // STEP 4: Log success
+        // Log sukses untuk memastikan callback berhasil dipanggil
         console.log('✅ CustomButton onPress called successfully for:', title);
         
       } catch (error) {
-        // STEP 5: Catch errors untuk prevent app crash
-        // Log error tapi don't crash app
+        // Tangkap error untuk mencegah app crash
+        // Error bisa terjadi jika onPress throw exception
         console.error('❌ CustomButton onPress error for:', title, error);
       }
     } else {
-      // STEP 6: Log blocked press untuk debugging
-      // Membantu troubleshooting kenapa button tidak respond
+      // Log mengapa button tidak merespons (untuk debugging)
+      // Membantu troubleshoot masalah "button tidak berfungsi"
       console.log('⚠️ CustomButton press blocked - disabled:', disabled, 'loading:', loading, 'onPress:', !!onPress);
     }
   };
@@ -174,20 +171,23 @@ export default function CustomButton({
    * Style di kanan override style di kiri jika ada conflict.
    * ================================================================================
    */
+  // Gabungkan style berdasarkan props yang diberikan
+  // Array style akan di-merge dari kiri ke kanan (kanan override kiri)
   const buttonStyle = [
-    styles.baseButton,                   // Base styling (border radius, shadow)
-    styles[`${variant}Button`],          // Variant-specific (background color)
-    styles[`${size}Button`],             // Size-specific (padding)
-    disabled && styles.disabledButton,   // Disabled state (gray out)
-    style,                               // Custom style (highest priority)
+    styles.baseButton,                   // Style dasar: border radius, shadow
+    styles[`${variant}Button`],          // Style variant: warna background
+    styles[`${size}Button`],             // Style size: padding
+    disabled && styles.disabledButton,   // Style disabled: abu-abu jika disabled
+    style,                               // Custom style dari parent (prioritas tertinggi)
   ];
 
+  // Gabungkan style text dengan pola yang sama
   const buttonTextStyle = [
-    styles.baseText,                     // Base text styling (font weight, align)
-    styles[`${variant}Text`],            // Variant-specific text color
-    styles[`${size}Text`],               // Size-specific font size
-    disabled && styles.disabledText,     // Disabled state text color
-    textStyle,                           // Custom text style (highest priority)
+    styles.baseText,                     // Style dasar text: font weight, align
+    styles[`${variant}Text`],            // Warna text sesuai variant
+    styles[`${size}Text`],               // Ukuran font sesuai size
+    disabled && styles.disabledText,     // Warna text abu-abu jika disabled
+    textStyle,                           // Custom text style dari parent (prioritas tertinggi)
   ];
 
   /* ================================================================================

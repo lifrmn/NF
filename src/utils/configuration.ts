@@ -20,40 +20,45 @@
  */
 
 // ==================================================================================
-// LANGKAH-LANGKAH SETUP NGROK (Development Mode)
+// LANGKAH-LANGKAH SETUP NGROK (Mode Pengembangan)
 // ==================================================================================
 // 
-// STEP 1: Jalankan Backend Server
-//   Command: cd backend && node server.js
+// LANGKAH 1: Jalankan Server Backend
+//   Perintah: cd backend && node server.js
 //   Backend akan berjalan di http://localhost:4000
 // 
-// STEP 2: Jalankan Ngrok Tunnel
-//   Command: ngrok http 4000
-//   Ngrok akan generate URL random seperti: https://abc-xyz.ngrok-free.dev
+// LANGKAH 2: Jalankan Tunnel Ngrok
+//   Perintah: ngrok http 4000
+//   Ngrok akan menghasilkan URL acak seperti: https://abc-xyz.ngrok-free.dev
 // 
-// STEP 3: Copy URL Ngrok ke Constant di Bawah
+// LANGKAH 3: Salin URL Ngrok ke Konstanta di Bawah
 //   Ganti nilai API_URL dengan URL dari Ngrok
 // 
-// STEP 4: Rebuild Aplikasi Mobile
+// LANGKAH 4: Bangun Ulang Aplikasi Mobile
 //   - Jika menggunakan Expo: expo start --clear
-//   - Jika sudah build APK: build ulang APK dengan URL baru
+//   - Jika sudah bangun APK: bangun ulang APK dengan URL baru
 // 
 // CATATAN PENTING:
-// - URL Ngrok berubah setiap kali Ngrok di-restart (free tier)
-// - Untuk production, ganti dengan URL server yang fix (tidak pakai Ngrok)
-// - Jangan commit URL development ke Git (bisa bocor ke orang lain)
+// - URL Ngrok berubah setiap kali Ngrok di-restart (tingkat gratis)
+// - Untuk produksi, ganti dengan URL server yang tetap (tidak pakai Ngrok)
+// - Jangan commit URL pengembangan ke Git (bisa bocor ke orang lain)
 // 
 // ==================================================================================
 
-// KONFIGURASI URL BACKEND API
-// URL ini adalah endpoint base untuk semua API calls ke backend
-// Format lengkap: API_URL + /api/[endpoint]
-// Contoh: https://unbellicose-troublesomely-miley.ngrok-free.dev/api/auth/login
-export const API_URL = 'https://unbellicose-troublesomely-miley.ngrok-free.dev';
+// URL Backend API yang digunakan oleh aplikasi mobile untuk semua request
+// Format: base URL tanpa trailing slash, endpoint akan ditambahkan di apiService
+// Contoh full URL: API_URL + '/api/auth/login'
+// PENTING: Ganti URL ini dengan URL Ngrok terbaru setiap kali Ngrok di-restart
+export const API_URL = 'https://unbellicose-troublesomely-miley.ngrok-free.dev'; // URL Ngrok aktif
 
-// CARA UPDATE URL NGROK (JIKA NGROK DI-RESTART)
-// 1. Jalankan ngrok di terminal: ngrok http 4000
-// 2. Copy URL yang muncul (misal: https://abc123.ngrok-free.dev)
-// 3. Ganti URL di atas dengan URL baru
-// 4. Rebuild APK: eas build --platform android --profile preview
-//    ATAU untuk development: expo start --clear
+// INSTRUKSI UPDATE URL (UNTUK DEVELOPMENT):
+// 1. Buka terminal, jalankan: ngrok http 4000
+// 2. Copy URL yang muncul (contoh: https://abc-123-xyz.ngrok-free.dev)
+// 3. Paste URL baru di variable API_URL di atas (ganti yang lama)
+// 4. Restart aplikasi: expo start --clear (untuk clear cache)
+// 5. Jika sudah build APK: rebuild dengan eas build --platform android --profile preview
+
+// CATATAN PENTING:
+// - Ngrok free tier: URL berubah tiap restart (tidak persistent)
+// - Untuk production: ganti dengan domain tetap (misal: https://api.myapp.com)
+// - Jangan hardcode URL production di sini (pakai environment variable)

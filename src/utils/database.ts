@@ -115,13 +115,12 @@ export const registerUser = async (
   username: string,
   password: string
 ): Promise<User> => {
-  // STEP 1: Call apiService.register() method
-  // apiService akan send POST request ke /api/auth/register
-  // Backend akan validate, hash password, dan save ke Prisma database
-  return await apiService.register({ name, username, password });
+  // Panggil method register dari apiService yang akan kirim data ke backend
+  // Backend akan validasi data, hash password, dan simpan user baru ke database
+  return await apiService.register({ name, username, password }); // Await karena operasi async
   
-  // NOTE: Register tidak otomatis login user
-  // Caller harus call loginUser() setelah register berhasil
+  // CATATAN PENTING: Fungsi ini tidak otomatis login user setelah registrasi
+  // Caller harus panggil loginUser() secara manual setelah register berhasil
 };
 
 /* ================================================================================
@@ -150,42 +149,45 @@ export const loginUser = async (
   password: string
 ): Promise<User | null> => {
   try {
-    // STEP 1: Call apiService.login() dengan credentials
-    // apiService akan send POST request ke /api/auth/login
-    // Backend response format: { token: "eyJhbGc...", user: {...} }
-    const response = await apiService.login({ username, password });
+    // STEP 1: Kirim credentials ke backend API untuk authentication
+    // Backend akan validate username/password di database dan generate JWT token
+    const response = await apiService.login({ username, password }); // POST /api/auth/login
 
-    // STEP 2: Validate response (check apakah token dan user ada)
+    // STEP 2: Validasi respons dari backend
+    // Pastikan response mengandung token (JWT) dan user data lengkap
+    // Optional chaining (?.) mencegah error jika response null/undefined
     if (response?.token && response?.user?.id) {
-      // SUBSTEP 2a: Save token ke AsyncStorage (persistent storage)
-      // Token ini akan digunakan untuk semua API calls berikutnya
-      await AsyncStorage.setItem('token', response.token);
+      // SUBSTEP 2a: Simpan JWT token ke AsyncStorage untuk persistent session
+      // Token ini akan otomatis diload saat app restart (auto-login)
+      await AsyncStorage.setItem('token', response.token); // Key: 'token', Value: JWT string
       
-      // SUBSTEP 2b: Save userId ke AsyncStorage
-      // userId.toString() convert number → string (AsyncStorage only accepts strings)
-      await AsyncStorage.setItem('userId', response.user.id.toString());
+      // SUBSTEP 2b: Simpan userId untuk tracking, fraud detection, dan analytics
+      // AsyncStorage hanya menerima string, jadi convert number → string
+      await AsyncStorage.setItem('userId', response.user.id.toString()); // Convert ID to string
       
-      // SUBSTEP 2c: Log success untuk debugging
-      console.log('✅ Login success, token saved to AsyncStorage');
+      // SUBSTEP 2c: Log konfirmasi untuk debugging
+      console.log('✅ Login success, token saved to AsyncStorage'); // Success message
       
-      // SUBSTEP 2d: Return user object
-      // UI akan display user name dan balance dari object ini
-      return response.user;
+      // SUBSTEP 2d: Return user object untuk ditampilkan di UI (dashboard)
+      // Object ini berisi: { id, name, username, balance, isActive, ... }
+      return response.user; // User data from backend
     }
 
-    // STEP 3: Handle invalid response (no token received)
-    // Ini jarang terjadi, tapi possible jika backend error
-    console.warn('⚠️ No token received from backend (invalid response format)');
-    return null;
+    // STEP 3: Handle kasus respons tidak valid (seharusnya tidak terjadi jika backend benar)
+    console.warn('⚠️ No token received from backend (invalid response format)'); // Warning log
+    return null; // Null = login gagal (invalid credentials atau backend error)
     
   } catch (error: any) {
-    // STEP 4: Handle errors (wrong credentials, network error, dll)
-    // Log error untuk debugging
-    console.error('❌ Login error:', error.message || error);
+    // STEP 4: Error handling untuk semua jenis error
+    // Error bisa dari:
+    // - Network error (no internet, server down)
+    // - Invalid credentials (username/password salah)
+    // - Backend error (500, database down)
+    console.error('❌ Login error:', error.message || error); // Log error detail untuk debugging
     
-    // Return null untuk indicate login failed
-    // Caller bisa check null dan display error message ke user
-    return null;
+    // Return null agar caller (LoginScreen) tahu login gagal
+    // Caller bisa tampilkan Alert error ke user
+    return null; // Indikasi login failed
   }
 };
 
@@ -207,29 +209,27 @@ export const loginUser = async (
  */
 export const logoutUser = async (): Promise<void> => {
   try {
-    // STEP 1: Check apakah token ada (user sedang login)
-    const token = await AsyncStorage.getItem('token');
+    // STEP 1: Cek apakah ada token tersimpan (user sedang login)
+    const token = await AsyncStorage.getItem('token'); // Ambil token dari storage
     
-    // STEP 2: Jika token ada, notify backend (best effort, ignore errors)
+    // STEP 2: Jika ada token, beritahu backend bahwa user logout
+    // Backend akan menambahkan token ke blacklist agar tidak bisa dipakai lagi
     if (token) {
-      // Call apiService.logout() → backend invalidate token di blacklist
-      // Wrap dalam try-catch karena logout harus berhasil even if backend down
-      await apiService.logout();
+      await apiService.logout(); // Kirim request logout ke backend
     }
     
   } catch {
-    // STEP 3: Ignore logout API errors
-    // Even if backend gagal, kita tetap lanjut delete local data
-    // User experience priority: logout selalu berhasil
-    console.warn('⚠️ Backend logout failed, continuing with local cleanup');
+    // STEP 3: Abaikan error dari backend logout
+    // Meskipun backend gagal, kita tetap harus hapus data lokal
+    // Prioritas: logout selalu berhasil dari sisi user
+    console.warn('⚠️ Backend logout failed, continuing with local cleanup'); // Log warning
   } finally {
-    // STEP 4: Always execute cleanup (even if backend logout failed)
-    // Delete token dan userId dari AsyncStorage
-    // multiRemove() adalah efficient way untuk delete multiple keys
-    await AsyncStorage.multiRemove(['token', 'userId']);
+    // STEP 4: Selalu jalankan cleanup lokal (bahkan jika backend gagal)
+    // Hapus token dan userId dari AsyncStorage
+    await AsyncStorage.multiRemove(['token', 'userId']); // Hapus 2 keys sekaligus (efisien)
     
-    // STEP 5: Log success untuk debugging
-    console.log('🚪 Logout successful, session data cleared from storage');
+    // STEP 5: Log konfirmasi logout berhasil
+    console.log('🚪 Logout successful, session data cleared from storage'); // Konfirmasi cleanup
   }
 };
 
@@ -256,37 +256,38 @@ export const logoutUser = async (): Promise<void> => {
  */
 export const restoreSession = async (): Promise<User | null> => {
   try {
-    // STEP 1: Load token dan userId dari AsyncStorage
-    const token = await AsyncStorage.getItem('token');
-    const userId = await AsyncStorage.getItem('userId');
+    // STEP 1: Coba load session credentials dari AsyncStorage
+    // Jika user pernah login dan belum logout, data ini akan ada
+    const token = await AsyncStorage.getItem('token'); // Load JWT token
+    const userId = await AsyncStorage.getItem('userId'); // Load user ID
     
-    // STEP 2: Check apakah token dan userId ada
-    // Jika salah satu tidak ada, session tidak bisa di-restore
+    // STEP 2: Validasi apakah kedua data ada (both required untuk session valid)
+    // Guard clause: early return jika salah satu missing
     if (!token || !userId) {
-      console.log('ℹ️ No saved session found (token or userId missing)');
-      return null; // User harus login manual
+      console.log('ℹ️ No saved session found (token or userId missing)'); // Info log (not error)
+      return null; // Return null = user belum login atau sudah logout
     }
 
-    // STEP 3: Fetch user data dari backend untuk validate token
-    // getUserById() akan use token di header (see apiService.makeRequest())
-    // Jika token invalid/expired, backend will return 401 dan throw error
-    const user = await getUserById(Number(userId));
+    // STEP 3: Validate token dengan fetch user data dari backend
+    // Jika token expired/invalid, backend akan return 401 error
+    // getUserById akan throw error, kita catch di bawah
+    const user = await getUserById(Number(userId)); // Convert string → number, lalu fetch
     
-    // STEP 4: Return user object jika berhasil
-    // Ini indicate token masih valid dan user bisa auto-login
+    // STEP 4: Jika berhasil fetch user, berarti token masih valid
+    // Auto-login berhasil, user bisa langsung ke dashboard
     if (user) {
-      console.log('✅ Session restored successfully for user:', user.username);
+      console.log('✅ Session restored successfully for user:', user.username); // Log with username
     }
-    return user;
+    return user; // Return user object atau null jika fetch failed
     
   } catch (error) {
-    // STEP 5: Handle errors (token expired, network error, dll)
-    // Jika error, return null → user harus login manual
-    console.error('❌ Session restore failed:', error);
+    // STEP 5: Handle error (token expired, network down, backend error)
+    console.error('❌ Session restore failed:', error); // Log error untuk debugging
     
-    // Clean up invalid token dari storage
-    await AsyncStorage.multiRemove(['token', 'userId']);
-    return null;
+    // Cleanup invalid session data untuk prevent retry loop
+    // Token expired = tidak bisa diperbaiki, harus login ulang
+    await AsyncStorage.multiRemove(['token', 'userId']); // Delete invalid credentials
+    return null; // Return null = force user to login manually
   }
 };
 

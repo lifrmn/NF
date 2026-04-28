@@ -324,14 +324,14 @@ router.post('/register', async (req, res) => {
     const existingCard = await prisma.nFCCard.findUnique({ where: { cardId } });
     if (existingCard) {
       // Kartu sudah terdaftar - kembalikan 409 Conflict dengan info kartu existing
-      return res.status(409).json({ error: 'Card already registered', card: { id: existingCard.id, cardId: existingCard.cardId, status: existingCard.cardStatus, userId: existingCard.userId } });
+      return res.status(409).json({ error: 'Kartu sudah terdaftar', card: { id: existingCard.id, cardId: existingCard.cardId, status: existingCard.cardStatus, userId: existingCard.userId } });
     }
 
     // STEP 4 & 5: Validasi user dan POLICY CHECK (1 USER = 1 CARD)
     if (userId) {
       // STEP 4: Validate user exists di database
       const user = await validateUser(userId);
-      if (!user) return res.status(404).json({ error: 'User not found' });
+      if (!user) return res.status(404).json({ error: 'Pengguna tidak ditemukan' });
 
       // STEP 5: 🔒 BUSINESS RULE - 1 USER = 1 CARD POLICY
       // Alasan policy ini:
@@ -342,7 +342,7 @@ router.post('/register', async (req, res) => {
       if (userExistingCards.length > 0) {
         // User sudah punya kartu - reject registration
         return res.status(409).json({ 
-          error: 'User already has a registered card',
+          error: 'Pengguna sudah memiliki kartu terdaftar',
           message: 'Each user can only register ONE NFC card',
           existingCard: { cardId: userExistingCards[0].cardId, cardStatus: userExistingCards[0].cardStatus, balance: userExistingCards[0].balance, registeredAt: userExistingCards[0].registeredAt }
         });
@@ -420,7 +420,7 @@ router.post('/register', async (req, res) => {
     // STEP 11: Error handling - tangkap semua error dan return 500 Internal Server Error
     console.error('❌ Card registration error:', error);
     res.status(500).json({ 
-      error: 'Failed to register card',
+      error: 'Gagal mendaftarkan kartu',
       details: error.message  // Error message untuk debugging
     });
     // Error bisa dari: Prisma (DB error), encryption error, validation error, dll
@@ -468,7 +468,7 @@ router.post('/link', async (req, res) => {
   try {
     // STEP 1: Extract required parameters dari request body
     const { cardId, userId } = req.body;
-    if (!cardId || !userId) return res.status(400).json({ error: 'Card ID and User ID required' });
+    if (!cardId || !userId) return res.status(400).json({ error: 'ID Kartu dan ID Pengguna diperlukan' });
 
     // STEP 2: Validate card exists (Prisma findUnique query)
     const card = await prisma.nFCCard.findUnique({ where: { cardId } });
@@ -477,7 +477,7 @@ router.post('/link', async (req, res) => {
     // STEP 3: Check card status - hanya ACTIVE card yang bisa di-link
     if (card.cardStatus !== 'ACTIVE') {
       // BLOCKED/LOST/EXPIRED card tidak bisa di-link ke user baru
-      return res.status(400).json({ error: `Cannot link ${card.cardStatus.toLowerCase()} card` });
+      return res.status(400).json({ error: `Tidak dapat menghubungkan kartu berstatus ${card.cardStatus.toLowerCase()}` });
     }
 
     // STEP 4: Validate user exists (gunakan helper function)
@@ -513,7 +513,7 @@ router.post('/link', async (req, res) => {
   } catch (error) {
     // Error handling - tangkap semua error (Prisma, validation, dll)
     console.error('❌ Card linking error:', error);
-    res.status(500).json({ error: 'Failed to link card', details: error.message });
+    res.status(500).json({ error: 'Gagal menghubungkan kartu', details: error.message });
   }
 });
 // ============================================================================
@@ -573,7 +573,7 @@ router.post('/tap', async (req, res) => {
   try {
     // STEP 1: Extract request data
     const { cardId, deviceId, location, signalStrength, readTime } = req.body;
-    if (!cardId || !deviceId) return res.status(400).json({ error: 'Card ID and Device ID required' });
+    if (!cardId || !deviceId) return res.status(400).json({ error: 'ID Kartu dan ID Perangkat diperlukan' });
 
     // STEP 2: Query card dari database dengan user relation
     const card = await prisma.nFCCard.findUnique({
@@ -585,7 +585,7 @@ router.post('/tap', async (req, res) => {
     // Validasi: card tidak ditemukan
     if (!card) {
       return res.status(404).json({ 
-        error: 'Card not recognized',
+        error: 'Kartu tidak dikenali',
         suggestion: 'Register this card first'  // Guide user untuk register kartu
       });
     }
@@ -595,7 +595,7 @@ router.post('/tap', async (req, res) => {
     // STEP 4: Handle BLOCKED card (diblokir oleh admin karena fraud/violation)
     if (card.cardStatus === 'BLOCKED') {
       return res.status(403).json({ 
-        error: 'Card is blocked',
+        error: 'Kartu diblokir',
         reason: 'Contact admin for assistance'
       });
     }
@@ -603,7 +603,7 @@ router.post('/tap', async (req, res) => {
     // STEP 5: Handle EXPIRED card (kartu sudah kadaluarsa)
     if (card.cardStatus === 'EXPIRED') {
       return res.status(403).json({ 
-        error: 'Card has expired',
+        error: 'Kartu telah kadaluarsa',
         expiredAt: card.expiresAt  // Inform user kapan expired
       });
     }

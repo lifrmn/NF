@@ -140,21 +140,18 @@ interface LoginScreenProps {
  */
 export default function LoginScreen({ onLogin, onNavigateToRegister }: LoginScreenProps) {
   // STATE 1: username input
-  // Controlled component pattern: value={username} onChangeText={setUsername}
-  // Initial value: empty string
-  const [username, setUsername] = useState('');
+  // Pattern controlled component: value={username} onChangeText={setUsername}
+  // Artinya: TextInput selalu menampilkan value dari state, dan perubahan langsung update state
+  const [username, setUsername] = useState(''); // Nilai awal: string kosong
   
   // STATE 2: password input
-  // Controlled component pattern
-  // Initial value: empty string
-  const [password, setPassword] = useState('');
+  // Sama seperti username, tapi dengan secureTextEntry untuk masking karakter
+  const [password, setPassword] = useState(''); // Nilai awal: string kosong
   
-  // STATE 3: loading flag
-  // Use case:
-  // - Disable login button saat processing
-  // - Show loading spinner di button
-  // - Prevent multiple concurrent login requests
-  const [loading, setLoading] = useState(false);
+  // STATE 3: loading flag untuk mencegah double-tap dan menampilkan spinner
+  // Saat true: tombol login dinonaktifkan dan menampilkan spinner
+  // Saat false: tombol login aktif kembali
+  const [loading, setLoading] = useState(false); // Nilai awal: false (tombol aktif)
 
   /* ================================================================================
    * FUNCTION: handleLogin
@@ -189,107 +186,80 @@ export default function LoginScreen({ onLogin, onNavigateToRegister }: LoginScre
    * ================================================================================
    */
   const handleLogin = async () => {
-    // STEP 1: Validate Input
-    // Check username & password not empty
-    // trim() untuk remove whitespace di awal/akhir
-    // Guard clause pattern: return early if invalid
+    // STEP 1: Validasi input - pastikan tidak ada field yang kosong
+    // trim() menghapus spasi di awal/akhir string
+    // Jika salah satu kosong, tampilkan alert dan hentikan proses
     if (!username.trim() || !password.trim()) {
-      Alert.alert('Error', 'Username dan password harus diisi');
-      return; // Early return: invalid input
+      Alert.alert('Error', 'Username dan password harus diisi'); // Alert native Android/iOS
+      return; // Berhenti di sini, tidak lanjut ke proses login
     }
 
-    // STEP 2: Set loading state
-    // Ini akan:
-    // - Disable login button (via disabled={loading})
-    // - Show loading spinner di button (via loading={loading})
-    // - Trigger re-render untuk update UI
-    setLoading(true);
+    // STEP 2: Aktifkan loading state supaya UI merespons
+    // Efek: tombol login jadi disabled, muncul spinner, user tidak bisa tap lagi
+    setLoading(true); // State berubah dari false → true, trigger re-render komponen
     
     try {
-      console.log('🔐 Attempting login for:', username);
+      console.log('🔐 Attempting login for:', username); // Log untuk debugging di console
 
-      // STEP 3: Try Backend API Login (Primary Method)
-      // Try-catch untuk handle backend unavailable
-      // Jika backend error, akan fallback ke offline mode
+      // STEP 3: Coba login melalui backend API terlebih dahulu (metode utama)
+      // Jika backend offline atau error, kita akan fallback ke database lokal
       try {
-        // API Call: POST /api/auth/login
-        // Backend akan:
-        // 1. Validate username & password dengan bcrypt
-        // 2. Generate JWT token (valid 24 jam)
-        // 3. Return { token, user } jika valid
-        // 4. Return error jika invalid credentials
-        const response = await apiService.login({ username, password });
+        // Memanggil API login ke backend server
+        // Backend akan cek username/password di database, lalu kirim token JWT jika valid
+        const response = await apiService.login({ username, password }); // Await karena ini operasi async
 
-        // VALIDASI 3.1: Check response structure
-        // response.token = JWT token string
-        // response.user = User object (id, username, email, balance, etc)
+        // VALIDASI 3.1: Pastikan respons dari server mengandung token dan data user
+        // Operator ?. artinya: akses property hanya jika object tidak null/undefined
         if (response?.token && response?.user) {
-          const userData = response.user;
+          const userData = response.user; // Ekstrak data user dari respons
           
-          // STEP 3.2: Save authentication data to AsyncStorage
-          // AsyncStorage = persistent key-value storage
-          // Data akan tersimpan meski app ditutup
-          // Use case:
-          // - Auto-restore session on next app launch
-          // - Include token di API request headers
-          // - Get current userId untuk API calls
-          await AsyncStorage.setItem('token', response.token);
-          await AsyncStorage.setItem('userId', userData.id.toString());
+          // STEP 3.2: Simpan token dan userId ke penyimpanan lokal agar sesi tetap ada
+          // AsyncStorage = seperti localStorage di web tapi async dan native
+          // Data ini akan dipakai lagi saat app dibuka kembali (auto-login)
+          await AsyncStorage.setItem('token', response.token); // Simpan JWT token
+          await AsyncStorage.setItem('userId', userData.id.toString()); // Simpan user ID (harus string)
           
-          console.log('✅ Login success (backend):', userData.username);
+          console.log('✅ Login success (backend):', userData.username); // Log sukses ke console
           
-          // STEP 3.3: Call onLogin callback
-          // Parent component (App.tsx) akan:
-          // - Set currentUser state
-          // - Navigate ke DashboardScreen
-          // - Initialize app dengan user data
-          onLogin(userData);
+          // STEP 3.3: Panggil callback onLogin yang diberikan oleh parent (App.tsx)
+          // Callback ini akan meng-update state di App.tsx dan pindah ke Dashboard
+          onLogin(userData); // Kirim data user ke parent component
           
-          // STEP 3.4: Reset loading & return (success path)
-          setLoading(false);
-          return; // Early return: backend login success
+          // STEP 3.4: Matikan loading state dan keluar dari function
+          setLoading(false); // Loading selesai, tombol aktif kembali
+          return; // Keluar dari function karena login berhasil, tidak perlu lanjut ke offline mode
         }
       } catch (err) {
-        // Backend unavailable or network error
-        // Tidak throw error, continue ke offline fallback
-        console.log('⚠️ Backend unavailable, using offline mode');
+        // Jika backend tidak merespons atau ada error jaringan
+        // Kita tidak throw error lagi, tapi lanjut ke mode offline di bawah
+        console.log('⚠️ Backend unavailable, using offline mode'); // Log peringatan
       }
 
-      // STEP 4: Fallback to SQLite Offline Login (Secondary Method)
-      // Call loginUser() dari database.ts
-      // loginUser() akan:
-      // 1. Query SQLite: SELECT * FROM users WHERE username = ?
-      // 2. Validate password dengan bcrypt.compare()
-      // 3. Return user object jika valid
-      // 4. Return null jika invalid
-      const localUser = await loginUser(username, password);
+      // STEP 4: Mode offline sebagai fallback jika backend gagal
+      // Coba login menggunakan database lokal (SQLite)
+      // Function loginUser akan cek username/password di database lokal
+      const localUser = await loginUser(username, password); // Query ke SQLite
       
       if (localUser) {
-        // Offline login berhasil
+        // Jika data user ditemukan di database lokal, login berhasil
         console.log('✅ Login success (offline):', localUser.username);
         
-        // Call onLogin callback dengan local user data
-        // Note: Offline mode tidak punya JWT token
-        // API calls akan gagal di offline mode
-        onLogin(localUser);
+        // Panggil callback onLogin dengan data dari database lokal
+        // Catatan: mode offline tidak punya token, jadi fitur sync backend tidak aktif
+        onLogin(localUser); // Kirim data user offline ke parent
       } else {
-        // Offline login gagal: credentials invalid
-        Alert.alert('Gagal', 'Username atau password salah');
+        // Jika username/password tidak cocok di database lokal juga
+        Alert.alert('Gagal', 'Username atau password salah'); // Tampilkan pesan error
       }
     } catch (error) {
-      // GLOBAL ERROR HANDLER
-      // Catch unexpected errors (bukan backend/offline errors)
-      // Possible errors:
-      // - AsyncStorage error
-      // - SQLite database error
-      // - Unexpected runtime error
-      console.error('❌ Login error:', error);
-      Alert.alert('Error', 'Terjadi kesalahan saat login');
+      // Handler error global yang menangkap error tak terduga
+      // Misalnya error saat akses AsyncStorage atau database corrupt
+      console.error('❌ Login error:', error); // Log detail error ke console
+      Alert.alert('Error', 'Terjadi kesalahan saat login'); // Tampilkan pesan umum ke user
     } finally {
-      // FINALLY BLOCK: Always executed
-      // Reset loading state untuk unlock button
-      // Important: Execute meski ada return di try block
-      setLoading(false);
+      // Block finally selalu dijalankan, baik sukses maupun error
+      // Penting untuk reset loading state agar UI tidak stuck
+      setLoading(false); // Pastikan loading state kembali ke false
     }
   };
 

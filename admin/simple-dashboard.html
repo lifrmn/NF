@@ -777,7 +777,14 @@ RELATED FILES:
                 <div style="padding: 10px; background: #fff3e0; border-radius: 4px; margin-bottom: 15px; font-size: 13px;">
                     <strong>💡 Penjelasan:</strong> Section ini untuk mengelola semua user yang terdaftar di sistem.
                     Anda dapat melihat daftar lengkap user dengan informasi: ID, username, nama lengkap, balance, 
-                    dan device yang digunakan. Fitur yang tersedia:
+                    dan device yang digunakan. 
+                    <br><br>
+                    <strong>Kolom Device:</strong>
+                    <ul style="margin: 8px 0 0 20px; line-height: 1.8;">
+                        <li>📱 <strong>Device ID ditampilkan</strong> jika user login via mobile app</li>
+                        <li>👤 <strong>"Manual Account"</strong> jika user dibuat admin atau belum pernah login</li>
+                    </ul>
+                    <strong>Fitur yang tersedia:</strong>
                     <ul style="margin: 8px 0 0 20px; line-height: 1.8;">
                         <li><strong>Add New User:</strong> Buat akun user baru manual</li>
                         <li><strong>Edit User:</strong> Ubah balance user (koreksi saldo)</li>
@@ -2349,7 +2356,12 @@ RELATED FILES:
                                     <td><strong>@${user.username}</strong></td>
                                     <td>${user.name}</td>
                                     <td><strong>${formatCurrency(user.balance)}</strong></td>
-                                    <td style="font-size: 12px; color: #7f8c8d;">${user.deviceName || user.deviceId}</td>
+                                    <td style="font-size: 12px; color: #7f8c8d;">
+                                        ${user.deviceId 
+                                            ? `📱 ${user.deviceId.substring(0, 12)}...` 
+                                            : '<span style="color: #95a5a6; font-style: italic;">👤 Manual Account</span>'
+                                        }
+                                    </td>
                                     <td>
                                         <button class="btn-sm" onclick="editUser(${user.id})" style="background: #3498db; color: white; margin: 2px;">Edit</button>
                                         <button class="btn-sm" onclick="deleteUser(${user.id}, '${user.username}')" style="background: #e74c3c; color: white; margin: 2px;">Delete</button>

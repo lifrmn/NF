@@ -121,16 +121,16 @@ router.get('/dashboard', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Get dashboard stats error:', error); // Log error
-    res.status(500).json({ error: 'Failed to get dashboard statistics' });
+    console.error('❌ Kesalahan mendapatkan statistik dashboard:', error); // Log error
+    res.status(500).json({ error: 'Gagal mendapatkan statistik dashboard' });
   }
 });
 
-// Update user balance (admin action)
+// Perbarui saldo pengguna (aksi admin)
 router.post('/balance-update', [
-  body('deviceId').notEmpty().withMessage('Device ID is required'),
-  body('amount').isFloat({ min: 0 }).withMessage('Amount must be positive'),
-  body('adminPassword').notEmpty().withMessage('Admin password is required')
+  body('deviceId').notEmpty().withMessage('ID Perangkat diperlukan'),
+  body('amount').isFloat({ min: 0 }).withMessage('Jumlah harus positif'),
+  body('adminPassword').notEmpty().withMessage('Password admin diperlukan')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -140,39 +140,39 @@ router.post('/balance-update', [
 
     const { deviceId, amount, adminPassword, reason } = req.body;
 
-    // Verify admin password
+    // Verifikasi password admin
     if (adminPassword !== process.env.ADMIN_PASSWORD) {
-      return res.status(401).json({ error: 'Invalid admin password' });
+      return res.status(401).json({ error: 'Password admin tidak valid' });
     }
 
-    // Validate amount
+    // Validasi jumlah
     if (amount <= 0) {
-      return res.status(400).json({ error: 'Amount must be positive' });
+      return res.status(400).json({ error: 'Jumlah harus positif' });
     }
 
-    if (amount > 10000000) { // 10 million max
-      return res.status(400).json({ error: 'Amount exceeds maximum limit' });
+    if (amount > 10000000) { // Maksimal 10 juta
+      return res.status(400).json({ error: 'Jumlah melebihi batas maksimum' });
     }
 
-    // Find device and users
+    // Cari perangkat dan pengguna
     const device = await prisma.device.findUnique({
       where: { deviceId }
     });
 
     if (!device) {
-      return res.status(404).json({ error: 'Device not found' });
+      return res.status(404).json({ error: 'Perangkat tidak ditemukan' });
     }
 
-    // Get all users for this device
+    // Dapatkan semua pengguna untuk perangkat ini
     const users = await prisma.user.findMany({
       where: { deviceId, isActive: true }
     });
 
     if (users.length === 0) {
-      return res.status(404).json({ error: 'No active users found for this device' });
+      return res.status(404).json({ error: 'Tidak ada pengguna aktif untuk perangkat ini' });
     }
 
-    // Update balance for all users on the device
+    // Perbarui saldo untuk semua pengguna di perangkat
     const updatedUsers = await Promise.all(
       users.map(async (user) => {
         const updatedUser = await prisma.user.update({
@@ -184,7 +184,7 @@ router.post('/balance-update', [
       })
     );
 
-    // Log admin action
+    // Catat aksi admin
     await prisma.adminLog.create({
       data: {
         action: 'BALANCE_UPDATE',
@@ -193,14 +193,14 @@ router.post('/balance-update', [
           amount,
           usersAffected: users.length,
           userIds: users.map(u => u.id),
-          reason: reason || 'Admin balance top-up'
+          reason: reason || 'Top-up saldo oleh admin'
         }),
         ipAddress: req.ip,
         userAgent: req.headers['user-agent']
       }
     });
 
-    // Update device total balance
+    // Perbarui total saldo perangkat
     await prisma.device.update({
       where: { deviceId },
       data: {
@@ -210,9 +210,9 @@ router.post('/balance-update', [
       }
     });
 
-    console.log(`💰 Admin added Rp ${amount.toLocaleString('id-ID')} to device ${deviceId.substring(0, 8)}... for ${users.length} users`);
+    console.log(`💰 Admin menambahkan Rp ${amount.toLocaleString('id-ID')} ke perangkat ${deviceId.substring(0, 8)}... untuk ${users.length} pengguna`);
 
-    // Emit real-time updates
+    // Kirim pembaruan real-time
     if (req.io) {
       req.io.to('admin-room').emit('balance-bulk-update', {
         deviceId,
@@ -221,7 +221,7 @@ router.post('/balance-update', [
         updatedUsers
       });
 
-      // Notify specific device
+      // Notifikasi perangkat tertentu
       req.io.to(`device-${deviceId}`).emit('balance-updated', {
         amount,
         users: updatedUsers.map(u => ({ id: u.id, balance: u.balance }))
@@ -230,7 +230,7 @@ router.post('/balance-update', [
 
     res.json({
       success: true,
-      message: `Balance updated for ${users.length} users on device ${deviceId}`,
+      message: `Saldo diperbarui untuk ${users.length} pengguna di perangkat ${deviceId}`,
       details: {
         deviceId,
         amount,
@@ -240,12 +240,12 @@ router.post('/balance-update', [
     });
 
   } catch (error) {
-    console.error('Balance update error:', error);
-    res.status(500).json({ error: 'Failed to update balance' });
+    console.error('❌ Kesalahan pembaruan saldo:', error);
+    res.status(500).json({ error: 'Gagal memperbarui saldo' });
   }
 });
 
-// Get admin logs
+// Dapatkan log admin
 router.get('/logs', async (req, res) => {
   try {
     const { limit = 50, offset = 0, action } = req.query;
@@ -262,12 +262,12 @@ router.get('/logs', async (req, res) => {
 
     res.json(logs);
   } catch (error) {
-    console.error('Get admin logs error:', error);
-    res.status(500).json({ error: 'Failed to get admin logs' });
+    console.error('❌ Kesalahan mendapatkan log admin:', error);
+    res.status(500).json({ error: 'Gagal mendapatkan log admin' });
   }
 });
 
-// System settings management
+// Manajemen pengaturan sistem
 router.get('/settings', async (req, res) => {
   try {
     const settings = await prisma.systemSettings.findMany();
@@ -275,7 +275,7 @@ router.get('/settings', async (req, res) => {
     const settingsObject = settings.reduce((acc, setting) => {
       let value = setting.value;
       
-      // Parse value based on type
+      // Parse nilai berdasarkan tipe
       switch (setting.type) {
         case 'number':
           value = parseFloat(setting.value);
@@ -300,15 +300,15 @@ router.get('/settings', async (req, res) => {
 
     res.json(settingsObject);
   } catch (error) {
-    console.error('Get settings error:', error);
-    res.status(500).json({ error: 'Failed to get settings' });
+    console.error('❌ Kesalahan mendapatkan pengaturan:', error);
+    res.status(500).json({ error: 'Gagal mendapatkan pengaturan' });
   }
 });
 
-// Update system setting
+// Perbarui pengaturan sistem
 router.put('/settings/:key', [
-  body('value').notEmpty().withMessage('Value is required'),
-  body('adminPassword').notEmpty().withMessage('Admin password is required')
+  body('value').notEmpty().withMessage('Nilai diperlukan'),
+  body('adminPassword').notEmpty().withMessage('Password admin diperlukan')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -330,7 +330,7 @@ router.put('/settings/:key', [
       create: { key, value: String(value), type }
     });
 
-    // Log admin action
+    // Catat aksi admin
     await prisma.adminLog.create({
       data: {
         action: 'SETTING_UPDATE',
@@ -344,33 +344,33 @@ router.put('/settings/:key', [
       }
     });
 
-    // Emit to admin dashboard
+    // Kirim ke dashboard admin
     if (req.io) {
       req.io.to('admin-room').emit('setting-updated', { key, value, type });
     }
 
     res.json({
-      message: 'Setting updated successfully',
+      message: 'Pengaturan berhasil diperbarui',
       setting
     });
 
   } catch (error) {
-    console.error('Update setting error:', error);
-    res.status(500).json({ error: 'Failed to update setting' });
+    console.error('❌ Kesalahan memperbarui pengaturan:', error);
+    res.status(500).json({ error: 'Gagal memperbarui pengaturan' });
   }
 });
 
-// Cleanup inactive devices
+// Bersihkan perangkat tidak aktif
 router.post('/cleanup-devices', async (req, res) => {
   try {
     const { adminPassword } = req.body;
 
-    // Verify admin password
+    // Verifikasi password admin
     if (adminPassword !== process.env.ADMIN_PASSWORD) {
-      return res.status(401).json({ error: 'Invalid admin password' });
+      return res.status(401).json({ error: 'Password admin tidak valid' });
     }
 
-    // Delete devices inactive for more than 24 hours
+    // Hapus perangkat tidak aktif lebih dari 24 jam
     const cutoffTime = new Date(Date.now() - 24 * 60 * 60 * 1000);
     
     const deletedDevices = await prisma.device.deleteMany({
@@ -381,7 +381,7 @@ router.post('/cleanup-devices', async (req, res) => {
       }
     });
 
-    // Log admin action
+    // Catat aksi admin
     await prisma.adminLog.create({
       data: {
         action: 'DEVICES_CLEANUP',
@@ -395,7 +395,7 @@ router.post('/cleanup-devices', async (req, res) => {
     });
 
     res.json({
-      message: `Cleaned up ${deletedDevices.count} inactive devices`,
+      message: `Membersihkan ${deletedDevices.count} perangkat tidak aktif`,
       deletedCount: deletedDevices.count
     });
 

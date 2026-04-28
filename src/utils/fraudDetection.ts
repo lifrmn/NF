@@ -3,123 +3,123 @@
  * 🔒 UTILITY: FraudDetectionAI
  * ==================================================================================
  * 
- * Purpose:
- * Advanced fraud detection system menggunakan Z-Score based anomaly detection
+ * Tujuan:
+ * Sistem deteksi fraud tingkat lanjut menggunakan Z-Score based anomaly detection
  * untuk real-time transaction monitoring dan risk assessment.
- * Protect users dari unauthorized transactions, account takeover, dan suspicious activity.
+ * Melindungi user dari unauthorized transactions, account takeover, dan suspicious activity.
  * 
- * Algorithm Overview:
+ * Ringkasan Algoritma:
  * ┌────────────────────────────────────────────────────────────────────┐
- * │                    FRAUD DETECTION PIPELINE                        │
+ * │                    PIPELINE DETEKSI FRAUD                        │
  * ├────────────────────────────────────────────────────────────────────┤
  * │                                                                     │
- * │  Transaction Input                                                  │
+ * │  Input Transaksi                                                  │
  * │       ↓                                                             │
- * │  Calculate 4 Risk Factors:                                         │
+ * │  Hitung 4 Faktor Risiko:                                         │
  * │   1. Velocity Score (35%)                                          │
- * │      - Transaction speed/frequency                                 │
- * │      - Multiple transactions in short time                         │
+ * │      - Kecepatan/frekuensi transaksi                                 │
+ * │      - Multiple transaksi dalam waktu singkat                         │
  * │   2. Amount Z-Score (40%)                                          │
- * │      - Statistical deviation dari user pattern                     │
+ * │      - Deviasi statistik dari pola user                     │
  * │      - Formula: (amount - μ) / σ                                   │
  * │   3. Frequency Score (15%)                                         │
- * │      - Daily transaction count vs history                          │
+ * │      - Jumlah transaksi harian vs histori                          │
  * │   4. Behavior Score (10%)                                          │
- * │      - New receiver, unusual pattern                               │
+ * │      - Penerima baru, pola tidak biasa                               │
  * │       ↓                                                             │
- * │  Weighted Risk Calculation:                                        │
+ * │  Kalkulasi Risiko Berbobot:                                        │
  * │    Score = Σ(Factor_i × Weight_i)                                  │
  * │       ↓                                                             │
- * │  Risk Level & Decision:                                            │
- * │    < 40: LOW (ALLOW)                                               │
- * │    40-60: MEDIUM (ALLOW with monitoring)                           │
- * │    60-80: HIGH (REVIEW required)                                   │
- * │    > 80: CRITICAL (BLOCK immediately)                              │
+ * │  Level Risiko & Keputusan:                                            │
+ * │    < 40: LOW (IZINKAN)                                               │
+ * │    40-60: MEDIUM (IZINKAN dengan monitoring)                           │
+ * │    60-80: HIGH (REVIEW diperlukan)                           │
+ * │    > 80: CRITICAL (BLOKIR segera)                              │
  * │       ↓                                                             │
- * │  Return Result + Store Alert                                       │
+ * │  Return Hasil + Simpan Alert                                       │
  * │                                                                     │
  * └────────────────────────────────────────────────────────────────────┘
  * 
- * Mathematical Foundation:
+ * Fondasi Matematis:
  * 
- * 1. Z-Score Formula:
+ * 1. Formula Z-Score:
  *    Z = (X - μ) / σ
- *    Where:
- *    - X = current transaction amount
- *    - μ = mean of user's historical transactions
- *    - σ = standard deviation of user's transactions
+ *    Dimana:
+ *    - X = jumlah transaksi saat ini
+ *    - μ = rata-rata transaksi histori user
+ *    - σ = standar deviasi transaksi user
  * 
- * 2. Weighted Risk Score:
- *    Risk = (0.35 × Velocity) + (0.40 × AmountZ) + (0.15 × Frequency) + (0.10 × Behavior)
+ * 2. Skor Risiko Berbobot:
+ *    Risiko = (0.35 × Velocity) + (0.40 × AmountZ) + (0.15 × Frequency) + (0.10 × Behavior)
  * 
- * 3. Normalization:
- *    All scores normalized to 0-100 scale for consistency
+ * 3. Normalisasi:
+ *    Semua skor dinormalisasi ke skala 0-100 untuk konsistensi
  * 
- * Academic References:
+ * Referensi Akademik:
  * - Chandola, V., et al. (2009). "Anomaly Detection: A Survey"
  *   ACM Computing Surveys (CSUR)
  * - Bolton, R. J., & Hand, D. J. (2002). "Statistical Fraud Detection: A Review"
  *   Statistical Science, Vol. 17, No. 3
  * - Phua, C., et al. (2010). "A Comprehensive Survey of Data Mining-based Fraud Detection Research"
  * 
- * Key Features:
+ * Fitur Utama:
  * 
- * 1. Real-Time Detection:
- *    - Analyze setiap transaksi sebelum diproses
- *    - No batch processing (instant risk assessment)
- *    - Latency < 100ms (lightweight calculation)
+ * 1. Deteksi Real-Time:
+ *    - Analisis setiap transaksi sebelum diproses
+ *    - Tidak ada batch processing (instant risk assessment)
+ *    - Latency < 100ms (kalkulasi ringan)
  * 
- * 2. Adaptive Learning:
- *    - Learn dari user's historical behavior
- *    - Adjust threshold per user (personalized detection)
- *    - No false positives untuk legitimate power users
+ * 2. Pembelajaran Adaptif:
+ *    - Belajar dari perilaku histori user
+ *    - Penyesuaian threshold per user (deteksi personal)
+ *    - Tidak ada false positive untuk legitimate power users
  * 
- * 3. Multi-Factor Analysis:
- *    - 4 independent risk factors
- *    - Weighted combination (scientific research-based)
- *    - Comprehensive risk assessment
+ * 3. Analisis Multi-Faktor:
+ *    - 4 faktor risiko independen
+ *    - Kombinasi berbobot (berbasis riset ilmiah)
+ *    - Penilaian risiko komprehensif
  * 
- * 4. Risk Categorization:
- *    - 4 risk levels: LOW, MEDIUM, HIGH, CRITICAL
- *    - 3 decisions: ALLOW, REVIEW, BLOCK
- *    - Clear actionable outcomes
+ * 4. Kategorisasi Risiko:
+ *    - 4 level risiko: LOW, MEDIUM, HIGH, CRITICAL
+ *    - 3 keputusan: ALLOW, REVIEW, BLOCK
+ *    - Hasil yang jelas dan dapat ditindaklanjuti
  * 
- * 5. Alert System:
- *    - Store high-risk transactions
- *    - Admin dashboard notifications
- *    - Manual review workflow
+ * 5. Sistem Alert:
+ *    - Simpan transaksi berisiko tinggi
+ *    - Notifikasi dashboard admin
+ *    - Workflow review manual
  * 
- * Use Cases:
+ * Kasus Penggunaan:
  * 
- * 1. Account Takeover Detection:
- *    - Sudden large transaction berbeda dari pattern
- *    - Multiple transactions dalam waktu singkat
- *    - Transaction dari device baru
+ * 1. Deteksi Account Takeover:
+ *    - Transaksi besar tiba-tiba berbeda dari pola
+ *    - Multiple transaksi dalam waktu singkat
+ *    - Transaksi dari device baru
  * 
- * 2. Money Laundering Prevention:
- *    - Unusual high-frequency transactions
- *    - Circular transaction patterns
- *    - Transaction ke banyak receivers
+ * 2. Pencegahan Money Laundering:
+ *    - Transaksi frekuensi tinggi yang tidak biasa
+ *    - Pola transaksi melingkar
+ *    - Transaksi ke banyak penerima
  * 
- * 3. Stolen Card Detection:
+ * 3. Deteksi Kartu Curian:
  *    - Physical card digunakan dari lokasi abnormal
- *    - Transaction amount drastically different
+ *    - Jumlah transaksi sangat berbeda drastis
  * 
- * Configuration:
- * - Weights: velocity(35%), amount(40%), frequency(15%), behavior(10%)
- * - Thresholds: LOW(<40), MEDIUM(40-60), HIGH(60-80), CRITICAL(>80)
+ * Konfigurasi:
+ * - Bobot: velocity(35%), amount(40%), frequency(15%), behavior(10%)
+ * - Threshold: LOW(<40), MEDIUM(40-60), HIGH(60-80), CRITICAL(>80)
  * - Z-Score: Normal(2), Suspicious(3), Anomaly(4)
  * 
- * Integration Points:
- * - Called from: routes/nfcCards.js (POST /payment endpoint)
- * - Stores alerts to: AsyncStorage (local) + Backend API
- * - Used by: Admin dashboard untuk manual review
+ * Titik Integrasi:
+ * - Dipanggil dari: routes/nfcCards.js (POST /payment endpoint)
+ * - Simpan alerts ke: AsyncStorage (local) + Backend API
+ * - Digunakan oleh: Dashboard admin untuk review manual
  * 
- * Performance:
- * - Average latency: ~50ms per transaction
- * - Memory footprint: ~5MB (cache historical data)
- * - Accuracy: 93% fraud detection rate (based on testing)
- * - False positive rate: <7% (acceptable for financial security)
+ * Performa:
+ * - Latency rata-rata: ~50ms per transaksi
+ * - Memory footprint: ~5MB (cache data histori)
+ * - Akurasi: 93% tingkat deteksi fraud (berdasarkan testing)
+ * - False positive rate: <7% (dapat diterima untuk keamanan finansial)
  * 
  * ==================================================================================
  */
@@ -129,25 +129,20 @@ import { getUserById, getUserTransactions } from './database';
 
 /**
  * ===============================================================================
- * 🔒 Z-SCORE BASED ANOMALY DETECTION WITH WEIGHTED RISK SCORING
+ * 🔒 DETEKSI ANOMALI BERBASIS Z-SCORE DENGAN PENILAIAN RISIKO BERBOBOT
  * ===============================================================================
  * 
- * Algorithm: Statistical Anomaly Detection
- * Methodology: Z-Score Normalization + Weighted Scoring System
- * 
- * Reference:
- * - Chandola, V., et al. (2009). "Anomaly Detection: A Survey"
- * - Bolton, R. J., & Hand, D. J. (2002). "Statistical Fraud Detection: A Review"
- * 
- * Core Principles:
- * 1. Z-Score Calculation: Measures standard deviations from mean
- * 2. Weighted Risk Factors: Multiple factors combined with scientific weights
- * 3. Pure Mathematical Formulas: NO if-else decision logic
- * 4. Real-Time Learning: Adapts to each user's unique behavior pattern
+ * Algoritma: Statistical Anomaly Detection
+ * Metodologi: Z-Score Normalization + Weighted Scoring System
+ * Prinsip Inti:
+ * 1. Kalkulasi Z-Score: Mengukur deviasi standar dari rata-rata
+ * 2. Faktor Risiko Berbobot: Multiple faktor dikombinasi dengan bobot ilmiah
+ * 3. Formula Matematis Murni: TIDAK ada logika keputusan if-else
+ * 4. Real-Time Learning: Beradaptasi dengan pola perilaku unik setiap user
  * 
  * Formula:
  * Z-Score = (X - μ) / σ
- * where X = current value, μ = mean, σ = standard deviation
+ * dimana X = nilai saat ini, μ = rata-rata, σ = standar deviasi
  * 
  * Risk Score = Σ (Factor_i × Weight_i)
  * 
@@ -160,68 +155,68 @@ import { getUserById, getUserTransactions } from './database';
 
 // Interface untuk context transaksi yang akan dianalisis
 // Berisi semua informasi yang diperlukan untuk deteksi fraud
-export interface TransactionContext {
-  senderId: number;        // ID user yang mengirim uang
-  receiverId: number;      // ID user yang menerima uang
-  amount: number;          // Jumlah uang yang ditransfer (dalam Rupiah)
-  timestamp: Date;         // Waktu transaksi terjadi
-  deviceId: string;        // ID device yang digunakan (untuk tracking)
-  userAgent?: string;      // Browser/app info (optional)
-  ipAddress?: string;      // IP address pengirim (optional)
-  cardId?: string;         // UID kartu NFC fisik (jika menggunakan kartu)
-  cardType?: 'virtual' | 'physical'; // Tipe transaksi: virtual (phone) atau physical (card)
-  isPhysicalCard?: boolean; // Flag untuk transaksi kartu fisik
+export interface TransactionContext {                                       // Interface konteks transaksi untuk analisis fraud
+  senderId: number;                                                        // ID pengguna pengirim uang (pembeli)
+  receiverId: number;                                                      // ID pengguna penerima uang (penjual)
+  amount: number;                                                          // Jumlah transfer dalam Rupiah (contoh: 50000)
+  timestamp: Date;                                                         // Waktu transaksi dilakukan (untuk analisis velocity)
+  deviceId: string;                                                        // Identifier perangkat (untuk deteksi multi-device fraud)
+  userAgent?: string;                                                      // Info browser/app (untuk fingerprinting)
+  ipAddress?: string;                                                      // Alamat IP pengirim (untuk deteksi lokasi)
+  cardId?: string;                                                         // UID kartu NFC fisik jika pakai kartu
+  cardType?: 'virtual' | 'physical';                                      // Tipe transaksi: virtual (HP ke HP) atau physical (kartu)
+  isPhysicalCard?: boolean;                                                // Flag boolean untuk transaksi dengan kartu fisik
 }
 
 // Interface untuk pola perilaku user
 // Ini adalah "memory" sistem tentang kebiasaan transaksi user
-export interface UserBehaviorPattern {
-  averageTransactionAmount: number;    // Rata-rata jumlah transaksi user (μ)
-  stdDevTransactionAmount: number;     // Standard deviation transaksi (σ)
-  maxTransactionAmount: number;        // Transaksi terbesar yang pernah dilakukan
-  transactionFrequency: number;        // Berapa kali transaksi per hari
-  commonReceivers: number[];           // Daftar penerima yang sering dikirimi uang
-  accountAge: number;                  // Umur akun (dalam hari)
+export interface UserBehaviorPattern {                                      // Interface pola perilaku pengguna untuk pembelajaran AI
+  averageTransactionAmount: number;                                        // Mean (μ) jumlah transaksi historis dalam Rupiah
+  stdDevTransactionAmount: number;                                         // Deviasi standar (σ) untuk ukur variasi transaksi
+  maxTransactionAmount: number;                                            // Transaksi tertinggi yang pernah dilakukan user
+  transactionFrequency: number;                                            // Frekuensi transaksi per hari (untuk velocity check)
+  commonReceivers: number[];                                               // Array ID penerima yang sering (top 5 frequent)
+  accountAge: number;                                                      // Umur akun dalam hari (akun baru = risiko tinggi)
 }
 
 // Interface untuk 4 faktor risiko yang dihitung
 // Setiap faktor menghasilkan score 0-100
-export interface FraudRiskFactors {
-  velocityScore: number;      // Score kecepatan transaksi (35% bobot)
-  amountZScore: number;       // Score anomali jumlah uang (40% bobot)
-  frequencyScore: number;     // Score frekuensi transaksi (15% bobot)
-  behaviorScore: number;      // Score pola perilaku (10% bobot)
+export interface FraudRiskFactors {                                         // Interface 4 faktor risiko dengan bobot berbeda
+  velocityScore: number;                                                   // Skor kecepatan transaksi (bobot 35%, paling penting untuk deteksi serangan)
+  amountZScore: number;                                                    // Skor anomali jumlah Z-Score (bobot 40%, terpenting secara finansial)
+  frequencyScore: number;                                                  // Skor frekuensi harian (bobot 15%, indikator tambahan)
+  behaviorScore: number;                                                   // Skor pola perilaku (bobot 10%, pelengkap analisis)
 }
 
 // Interface untuk hasil akhir deteksi fraud
 // Ini yang dikembalikan ke aplikasi untuk menentukan transaksi diizinkan atau tidak
-export interface FraudDetectionResult {
-  overallRiskScore: number;                      // Total risk score (0-100)
-  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';  // Level risiko
-  decision: 'ALLOW' | 'REVIEW' | 'BLOCK';        // Keputusan: izinkan/review/blokir
-  riskFactors: FraudRiskFactors;                 // Detail 4 faktor risiko
-  reasons: string[];                             // Alasan mengapa berisiko
-  confidence: number;                            // Seberapa yakin sistem (0-1)
-  timestamp: Date;                               // Waktu analisis
-  algorithmUsed: string;                         // Nama algoritma yang dipakai
+export interface FraudDetectionResult {                                     // Interface hasil akhir deteksi fraud untuk decision making
+  overallRiskScore: number;                                                // Skor risiko total 0-100 (weighted sum dari 4 faktor)
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';                      // Level: LOW(<40), MEDIUM(40-59), HIGH(60-79), CRITICAL(80-100)
+  decision: 'ALLOW' | 'REVIEW' | 'BLOCK';                                 // Keputusan final: ALLOW (lanjut), REVIEW (tinjau), BLOCK (tolak)
+  riskFactors: FraudRiskFactors;                                           // Object berisi detail 4 skor faktor risiko
+  reasons: string[];                                                       // Array string alasan mengapa transaksi berisiko tinggi
+  confidence: number;                                                      // Tingkat kepercayaan 0-1 (semakin banyak data, semakin tinggi)
+  timestamp: Date;                                                         // Waktu analisis dilakukan (untuk audit trail)
+  algorithmUsed: string;                                                   // Nama algoritma: "Z-Score Anomaly Detection + Weighted Scoring"
 }
 
 // Interface untuk fraud alert yang disimpan
 // Alert ini muncul di admin dashboard untuk transaksi mencurigakan
-export interface FraudAlert {
-  id: string;              // Unique ID alert
-  userId: number;          // User yang melakukan transaksi mencurigakan
-  transactionId?: string;  // ID transaksi (optional)
-  riskScore: number;       // Risk score transaksi
-  riskLevel: string;       // Level risiko
-  reason: string;          // Alasan alert dibuat
-  timestamp: Date;         // Kapan alert dibuat
-  status: 'NEW' | 'REVIEWED' | 'RESOLVED';  // Status: baru/sudah direview/selesai
-  adminNotes?: string;     // Catatan dari admin (optional)
+export interface FraudAlert {                                               // Interface alert penipuan untuk admin dashboard
+  id: string;                                                              // UUID unik alert (untuk tracking dan reference)
+  userId: number;                                                          // ID pengguna yang melakukan transaksi mencurigakan
+  transactionId?: string;                                                  // ID transaksi terkait (optional, bisa null jika preventive)
+  riskScore: number;                                                       // Skor risiko transaksi (0-100, disimpan untuk sorting)
+  riskLevel: string;                                                       // Level risiko string: "LOW", "MEDIUM", "HIGH", "CRITICAL"
+  reason: string;                                                          // Deskripsi alasan alert dibuat (untuk admin review)
+  timestamp: Date;                                                         // Waktu alert dibuat (untuk sorting dan filtering)
+  status: 'NEW' | 'REVIEWED' | 'RESOLVED';                                // Status penanganan: NEW (belum dilihat), REVIEWED (sudah dilihat), RESOLVED (selesai)
+  adminNotes?: string;                                                     // Catatan tambahan dari admin (optional, untuk dokumentasi)
 }
 
 // ============================================================================
-// FRAUD DETECTION CONFIGURATION
+// KONFIGURASI DETEKSI FRAUD
 // ============================================================================
 // Konfigurasi parameter untuk algoritma fraud detection
 // Semua nilai ini berdasarkan research paper dan tuning empiris
@@ -279,11 +274,12 @@ class FraudDetectionAI {
   
   // Method untuk mendapatkan instance (Singleton Pattern)
   // Memastikan hanya ada 1 instance FraudDetectionAI di seluruh aplikasi
+  // Pattern: Lazy initialization - buat instance baru hanya jika belum ada
   public static getInstance(): FraudDetectionAI {
-    if (!FraudDetectionAI.instance) {
-      FraudDetectionAI.instance = new FraudDetectionAI();
+    if (!FraudDetectionAI.instance) { // Jika instance belum dibuat
+      FraudDetectionAI.instance = new FraudDetectionAI(); // Buat instance baru
     }
-    return FraudDetectionAI.instance;
+    return FraudDetectionAI.instance; // Return instance yang ada (atau baru dibuat)
   }
 
   // =========================================================================
@@ -294,66 +290,78 @@ class FraudDetectionAI {
   // Output: FraudDetectionResult (hasil analisis dengan risk score, level, dll)
   public async detectFraud(context: TransactionContext): Promise<FraudDetectionResult> {
     try {
-      console.log('🔍 [Z-Score Anomaly Detection] Analyzing user:', context.senderId);
+      console.log('🔍 [Z-Score Anomaly Detection] Analyzing user:', context.senderId); // Log tracking
 
-      // STEP 1: Ambil behavior pattern user dari database atau cache
-      // Pattern ini berisi rata-rata transaksi, standar deviasi, dll
+      // STEP 1: Ambil behavior pattern user (pola kebiasaan transaksi)
+      // Pattern ini berisi statistik: rata-rata, std dev, max amount, dll
+      // Data ini akan digunakan untuk hitung Z-Score dan deteksi anomali
       const behaviorPattern = await this.getUserBehaviorPattern(context.senderId);
       
-      // STEP 2: Hitung 4 faktor risiko (velocity, amount, frequency, behavior)
-      // Setiap faktor menghasilkan score 0-100
+      // STEP 2: Hitung 4 faktor risiko secara bersamaan (parallel execution)
+      // Faktor 1: velocityScore (35%) - kecepatan/frekuensi transaksi
+      // Faktor 2: amountZScore (40%) - deviasi jumlah uang dari rata-rata
+      // Faktor 3: frequencyScore (15%) - seberapa sering user transaksi
+      // Faktor 4: behaviorScore (10%) - pola mencurigakan (penerima baru, dll)
       const riskFactors = await this.calculateRiskFactors(context, behaviorPattern);
       
-      // STEP 3: Gabungkan 4 faktor dengan weighted scoring
+      // STEP 3: Gabungkan 4 faktor dengan weighted scoring (skor berbobot)
       // Formula: Score = (velocity × 35%) + (amount × 40%) + (frequency × 15%) + (behavior × 10%)
+      // Hasil: skor akhir 0-100 yang merepresentasikan total risiko
       const overallRiskScore = this.calculateWeightedRiskScore(riskFactors);
       
-      // STEP 4: Map score ke risk level (LOW/MEDIUM/HIGH/CRITICAL) dan decision (ALLOW/REVIEW/BLOCK)
-      // Menggunakan ternary operator (bukan if-else!)
+      // STEP 4: Map skor ke level risiko dan keputusan
+      // Skor 0-39 = LOW (ALLOW), 40-59 = MEDIUM (ALLOW), 60-79 = HIGH (REVIEW), 80-100 = CRITICAL (BLOCK)
+      // Menggunakan ternary operator (formula matematis tanpa if-else)
       const { riskLevel, decision } = this.mapScoreToRiskLevel(overallRiskScore);
       
-      // STEP 5: Generate alasan mengapa transaksi ini berisiko
+      // STEP 5: Generate daftar alasan mengapa transaksi ini berisiko
+      // Array string yang menjelaskan faktor mana yang tinggi
       const reasons = this.generateRiskReasons(riskFactors, context, behaviorPattern);
       
-      // STEP 6: Hitung confidence level (seberapa yakin sistem dengan hasil ini)
-      // Semakin banyak data historis, semakin tinggi confidence
+      // STEP 6: Hitung confidence level (kepercayaan sistem terhadap hasil)
+      // Semakin banyak data historis user, semakin tinggi confidence (0-1)
       const confidence = this.calculateConfidence(behaviorPattern);
       
+      // Buat object hasil deteksi fraud dengan semua informasi yang diperlukan
       const result: FraudDetectionResult = {
-        overallRiskScore,
-        riskLevel,
-        decision,
-        riskFactors,
-        reasons,
-        confidence,
-        timestamp: new Date(),
-        algorithmUsed: 'Z-Score Anomaly Detection + Weighted Scoring'
+        overallRiskScore,     // Skor risiko total (0-100)
+        riskLevel,            // Level: LOW/MEDIUM/HIGH/CRITICAL
+        decision,             // Keputusan: ALLOW/REVIEW/BLOCK
+        riskFactors,          // Detail 4 faktor risiko
+        reasons,              // Array alasan mengapa berisiko
+        confidence,           // Confidence (0-1): seberapa yakin sistem
+        timestamp: new Date(),  // Waktu analisis dilakukan
+        algorithmUsed: 'Z-Score Anomaly Detection + Weighted Scoring' // Nama algoritma
       };
 
-      console.log(`✅ [Anomaly Detection] ${riskLevel} (Score: ${overallRiskScore})`);
+      console.log(`✅ [Anomaly Detection] ${riskLevel} (Score: ${overallRiskScore})`); // Log hasil
 
-      const shouldAlert = overallRiskScore >= FRAUD_CONFIG.RISK_THRESHOLDS.HIGH;
-      shouldAlert && await this.createFraudAlert(context, result);
+      // Jika skor >= 60 (HIGH atau CRITICAL), buat fraud alert untuk admin
+      const shouldAlert = overallRiskScore >= FRAUD_CONFIG.RISK_THRESHOLDS.HIGH; // Threshold HIGH = 60
+      shouldAlert && await this.createFraudAlert(context, result); // Conditional execution dengan &&
 
+      // Simpan hasil deteksi ke storage untuk tracking dan audit trail
       await this.storeFraudDetectionResult(context, result);
-      return result;
+      return result; // Return hasil ke caller
 
     } catch (error) {
-      console.error('❌ [Anomaly Detection] Error:', error);
+      // Error handling: jika sistem deteksi error, return fallback result (default LOW)
+      // Ini mencegah transaksi diblokir karena error sistem (fail-safe mechanism)
+      console.error('❌ [Anomaly Detection] Error:', error); // Log error untuk debugging
       return {
-        overallRiskScore: 0,
-        riskLevel: 'LOW',
-        decision: 'ALLOW',
+        overallRiskScore: 0,     // Skor 0 = risiko terendah
+        riskLevel: 'LOW',        // Anggap LOW risk (aman)
+        decision: 'ALLOW',       // Izinkan transaksi (jangan blokir karena sistem error)
         riskFactors: {
-          velocityScore: 0,
+          velocityScore: 0,      // Semua faktor di-set 0 (default)
           amountZScore: 0,
           frequencyScore: 0,
           behaviorScore: 0
         },
-        reasons: ['Detection system offline'],
-        confidence: 0,
-        timestamp: new Date(),
-        algorithmUsed: 'Fallback Mode'
+        reasons: ['Detection system offline'], // Alasan: sistem offline
+        confidence: 0,           // Confidence 0 = tidak ada confidence (sistem error)
+        timestamp: new Date(),   // Waktu saat ini
+        algorithmUsed: 'Fallback Mode' // Mode fallback (bukan algoritma sebenarnya)
       };
     }
   }
@@ -365,33 +373,37 @@ class FraudDetectionAI {
   // Pattern ini adalah "memori" sistem tentang kebiasaan transaksi user
   private async getUserBehaviorPattern(userId: number): Promise<UserBehaviorPattern> {
     try {
-      // STEP 1: Cek cache dulu (agar tidak query database terus-menerus)
-      // Cache = memori sementara untuk data yang sering diakses
-      const cached = this.userBehaviorCache.get(userId);
-      if (cached) return cached;  // Kalau ada di cache, langsung return
+      // STEP 1: Cek cache terlebih dahulu (caching strategy)
+      // Cache = memori sementara di RAM untuk data yang sering diakses
+      // Keuntungan: Menghindari query database berulang (lebih cepat & hemat resource)
+      const cached = this.userBehaviorCache.get(userId); // Ambil dari Map cache
+      if (cached) return cached;  // Cache hit: langsung return tanpa query DB
 
-      // STEP 2: Kalau tidak ada di cache, ambil dari database
-      const user = await getUserById(userId);              // Data user
-      const transactions = await getUserTransactions(userId); // Semua transaksi user
+      // STEP 2: Cache miss - data tidak ada di cache, ambil dari database
+      const user = await getUserById(userId);              // Query data user dari DB
+      const transactions = await getUserTransactions(userId); // Query semua transaksi user dari DB
       
       // STEP 3: Hitung behavior pattern dari data historis
+      // Pattern ini adalah "pembelajaran" sistem tentang kebiasaan user
       const pattern = this.calculateBehaviorPattern(user, transactions);
       
-      // STEP 4: Simpan ke cache untuk dipakai lagi nanti
-      this.userBehaviorCache.set(userId, pattern);
+      // STEP 4: Simpan ke cache untuk request berikutnya
+      // Next time user ini dianalisis, bisa langsung dari cache (lebih cepat)
+      this.userBehaviorCache.set(userId, pattern); // Store ke Map cache
       
-      return pattern;
+      return pattern; // Return pattern yang sudah dihitung
 
     } catch (error) {
-      // Kalau ada error (misal database down), return default pattern
-      console.error('❌ Error getting user behavior:', error);
+      // Error handling: jika gagal ambil data user (misal DB down)
+      // Return default pattern agar sistem tetap bisa jalan (degraded mode)
+      console.error('❌ Error getting user behavior:', error); // Log error
       return {
-        averageTransactionAmount: 50000,    // Default rata-rata Rp 50.000
-        stdDevTransactionAmount: 20000,     // Default std dev Rp 20.000
-        maxTransactionAmount: 100000,       // Default max Rp 100.000
-        transactionFrequency: 2,            // Default 2 transaksi/hari
-        commonReceivers: [],                // Belum ada data penerima
-        accountAge: 1                       // Anggap akun baru (1 hari)
+        averageTransactionAmount: 50000,    // Default: rata-rata Rp 50.000 (asumsi wajar)
+        stdDevTransactionAmount: 20000,     // Default: std dev Rp 20.000 (variasi sedang)
+        maxTransactionAmount: 100000,       // Default: max Rp 100.000 (batas wajar)
+        transactionFrequency: 2,            // Default: 2 transaksi per hari (normal)
+        commonReceivers: [],                // Belum ada data penerima (empty array)
+        accountAge: 1                       // Anggap akun baru 1 hari (konservatif)
       };
     }
   }
@@ -402,66 +414,119 @@ class FraudDetectionAI {
   // Menghitung pola perilaku user dari data historis transaksi
   // Ini adalah "learning" dari algoritma AI kita
   private calculateBehaviorPattern(user: any, transactions: any[]): UserBehaviorPattern {
-    const hasHistory = transactions.length > 0;
+    const hasHistory = transactions.length > 0; // Cek apakah user punya riwayat transaksi
     
-    // Jika user belum pernah transaksi, gunakan default pattern
+    // GUARD CLAUSE: Jika user belum pernah transaksi, return default pattern
+    // Ini mencegah error division by zero saat hitung mean/variance
     if (!hasHistory) {
       return {
-        averageTransactionAmount: 50000,     // Asumsi rata-rata Rp 50.000
-        stdDevTransactionAmount: 20000,      // Asumsi std dev Rp 20.000
-        maxTransactionAmount: 100000,        // Asumsi max Rp 100.000
-        transactionFrequency: 0,             // Belum ada frekuensi
-        commonReceivers: [],                 // Belum ada penerima umum
-        accountAge: this.calculateAccountAge(user.createdAt)
+        averageTransactionAmount: 50000,     // Asumsi default: Rp 50.000 (nilai konservatif)
+        stdDevTransactionAmount: 20000,      // Asumsi std dev: Rp 20.000 (variasi sedang)
+        maxTransactionAmount: 100000,        // Asumsi max: Rp 100.000 (batas wajar)
+        transactionFrequency: 0,             // Belum ada transaksi, frekuensi = 0
+        commonReceivers: [],                 // Belum ada penerima umum (empty array)
+        accountAge: this.calculateAccountAge(user.createdAt) // Hitung umur akun
       };
     }
 
-    // STEP 1: Ekstrak semua jumlah transaksi
-    const amounts = transactions.map(t => t.amount);
+    // STEP 1: Ekstrak semua jumlah transaksi ke array
+    // map() mengubah array transaction objects jadi array of numbers (amount saja)
+    const amounts = transactions.map(t => t.amount); // [10000, 50000, 30000, ...]
     
-    // STEP 2: Hitung MEAN (rata-rata)
+    // ========================================================================
+    // STEP 2: HITUNG MEAN (μ) - RATA-RATA
+    // ========================================================================
     // Formula: μ = Σx / n
-    const mean = amounts.reduce((sum, val) => sum + val, 0) / amounts.length;
-    
-    // STEP 3: Hitung STANDARD DEVIATION (σ)
-    // Standard deviation mengukur seberapa jauh data tersebar dari mean
+    // di mana:
+    // - Σx = jumlah total semua nilai (sum)
+    // - n = jumlah data (length)
     // 
-    // Formula: σ = sqrt( Σ(x - μ)² / n )
+    // Contoh: [10000, 50000, 30000]
+    // μ = (10000 + 50000 + 30000) / 3 = 90000 / 3 = 30000
+    const mean = amounts.reduce((sum, val) => sum + val, 0) / amounts.length;
+    // reduce(): accumulate sum dari semua amounts, dibagi length = rata-rata
+    
+    // ========================================================================
+    // STEP 3: HITUNG STANDARD DEVIATION (σ) - DEVIASI STANDAR
+    // ========================================================================
+    // Standard deviation mengukur seberapa jauh data tersebar dari mean
+    // Semakin besar σ, semakin bervariasi data
+    // Semakin kecil σ, semakin konsisten data
+    // 
+    // Formula Lengkap: σ = sqrt( Σ(x - μ)² / n )
     // 
     // SUBSTEP 3a: Hitung squared differences (x - μ)²
-    // Untuk setiap nilai, kurangi mean lalu kuadratkan
+    // Untuk setiap nilai:
+    // 1. Kurangi mean: (x - μ)
+    // 2. Kuadratkan hasilnya: (x - μ)²
+    // 
+    // Contoh dengan mean = 30000:
+    // - 10000: (10000 - 30000)² = (-20000)² = 400,000,000
+    // - 50000: (50000 - 30000)² = (20000)² = 400,000,000
+    // - 30000: (30000 - 30000)² = (0)² = 0
     const squaredDiffs = amounts.map(val => Math.pow(val - mean, 2));
+    // map(): transform setiap amount jadi squared difference
+    // Math.pow(x, 2): kuadratkan nilai x (sama dengan x * x)
     
     // SUBSTEP 3b: Hitung variance (rata-rata dari squared differences)
-    // Variance = Σ(x - μ)² / n
+    // Variance (σ²) = Σ(x - μ)² / n
+    // 
+    // Contoh:
+    // Variance = (400,000,000 + 400,000,000 + 0) / 3
+    //          = 800,000,000 / 3
+    //          = 266,666,666.67
     const variance = squaredDiffs.reduce((sum, val) => sum + val, 0) / amounts.length;
+    // reduce(): sum semua squared diffs, dibagi length = variance
     
-    // SUBSTEP 3c: Standard Deviation = akar dari variance
-    // σ = sqrt(variance)
+    // SUBSTEP 3c: Standard Deviation (σ) = akar kuadrat dari variance
+    // σ = sqrt(σ²) = sqrt(variance)
+    // 
+    // Contoh:
+    // σ = sqrt(266,666,666.67) = 16,329.93
+    // 
+    // Interpretasi:
+    // Jika rata-rata transaksi user adalah Rp 30.000,
+    // maka std dev Rp 16.329 berarti transaksi user bervariasi ±Rp 16.329
+    // dari rata-rata (bisa Rp 13.671 sampai Rp 46.329)
     const stdDev = Math.sqrt(variance);
+    // Math.sqrt(): akar kuadrat
 
-    const maxAmount = Math.max(...amounts);
+    // STEP 4: Hitung transaksi maksimum yang pernah dilakukan user
+    // Math.max(...array) menggunakan spread operator untuk find max value
+    const maxAmount = Math.max(...amounts); // Cari nilai terbesar di array amounts
+    
+    // STEP 5: Hitung frekuensi transaksi per hari
+    // Frekuensi = Total transaksi / Jumlah hari sejak transaksi pertama
     const daysSinceFirst = this.calculateDaysSince(transactions[transactions.length - 1].createdAt);
-    const frequency = transactions.length / Math.max(daysSinceFirst, 1);
+    const frequency = transactions.length / Math.max(daysSinceFirst, 1); // Hindari division by zero
+    // Math.max(x, 1): minimal 1 hari untuk hindari division by zero
 
-    const receiverCounts = new Map<number, number>();
+    // STEP 6: Identifikasi penerima yang sering (common receivers)
+    // Buat Map untuk hitung berapa kali user kirim ke setiap receiverId
+    const receiverCounts = new Map<number, number>(); // Map<receiverId, count>
     transactions.forEach(tx => {
+      // Untuk setiap transaksi, increment count receiverId
+      // Jika receiverId belum ada, default 0 lalu +1
       receiverCounts.set(tx.receiverId, (receiverCounts.get(tx.receiverId) || 0) + 1);
     });
 
-    const commonReceivers = Array.from(receiverCounts.entries())
-      .filter(([_, count]) => count >= 2)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([receiverId, _]) => receiverId);
+    // Filter penerima yang sudah pernah ≥ 2 kali (frequent receivers)
+    // Sort descending (yang paling sering di atas)
+    // Ambil top 5 receivers
+    const commonReceivers = Array.from(receiverCounts.entries()) // Convert Map to array of [key, value]
+      .filter(([_, count]) => count >= 2)      // Filter: minimal 2 transaksi
+      .sort((a, b) => b[1] - a[1])             // Sort descending by count
+      .slice(0, 5)                             // Ambil 5 teratas
+      .map(([receiverId, _]) => receiverId);   // Extract receiverId saja (buang count)
 
+    // STEP 7: Return behavior pattern yang sudah dihitung
     return {
-      averageTransactionAmount: mean,
-      stdDevTransactionAmount: Math.max(stdDev, mean * 0.1),
-      maxTransactionAmount: maxAmount,
-      transactionFrequency: frequency,
-      commonReceivers,
-      accountAge: this.calculateAccountAge(user.createdAt)
+      averageTransactionAmount: mean,                           // μ (mean)
+      stdDevTransactionAmount: Math.max(stdDev, mean * 0.1),    // σ (minimal 10% dari mean)
+      maxTransactionAmount: maxAmount,                          // Max transaksi
+      transactionFrequency: frequency,                          // Transaksi per hari
+      commonReceivers,                                          // Top 5 penerima umum
+      accountAge: this.calculateAccountAge(user.createdAt)      // Umur akun (hari)
     };
   }
 
@@ -475,25 +540,38 @@ class FraudDetectionAI {
     behaviorPattern: UserBehaviorPattern
   ): Promise<FraudRiskFactors> {
     
-    // Hitung 4 faktor secara bersamaan (parallel) agar lebih cepat
-    // FAKTOR 1: Velocity - Seberapa cepat user melakukan transaksi
+    // Hitung 4 faktor risiko secara parallel (bersamaan) untuk efisiensi
+    // await di setiap line agar execution synchronous & mudah debug
+    
+    // FAKTOR 1: Velocity Score (Bobot 35%)
+    // Mengukur: Seberapa cepat user melakukan transaksi (terlalu sering = mencurigakan)
+    // Metrik: Jumlah transaksi dalam 5 menit, 1 jam, 24 jam
+    // Z-Score: Bandingkan dengan historical average frequency user
     const velocityScore = await this.calculateVelocityScore(context.senderId);
     
-    // FAKTOR 2: Amount - Apakah jumlah uang ini anomali untuk user ini
+    // FAKTOR 2: Amount Z-Score (Bobot 40%) - FAKTOR TERPENTING
+    // Mengukur: Apakah jumlah uang ini anomali untuk user ini?
+    // Formula: Z = (X - μ) / σ
+    // Z > 2 = anomali, Z > 3 = sangat anomali, Z > 4 = ekstrim anomali
     const amountZScore = this.calculateAmountZScore(context.amount, behaviorPattern);
     
-    // FAKTOR 3: Frequency - Seberapa sering user transaksi
+    // FAKTOR 3: Frequency Score (Bobot 15%)
+    // Mengukur: Seberapa sering user transaksi dibanding rata-rata user lain
+    // Metrik: Transaksi per hari vs populasi
     const frequencyScore = this.calculateFrequencyScore(behaviorPattern);
     
-    // FAKTOR 4: Behavior - Apakah ada pola mencurigakan (penerima baru, dll)
+    // FAKTOR 4: Behavior Score (Bobot 10%)
+    // Mengukur: Apakah ada pola mencurigakan?
+    // - Penerima baru (tidak ada di common receivers)
+    // - Akun baru (account age < 7 hari)
     const behaviorScore = this.calculateBehaviorScore(context.receiverId, behaviorPattern);
     
-    // Return object berisi 4 score
+    // Return object berisi 4 score (masing-masing 0-100)
     return {
-      velocityScore,
-      amountZScore,
-      frequencyScore,
-      behaviorScore
+      velocityScore,   // 35% weight
+      amountZScore,    // 40% weight (most important)
+      frequencyScore,  // 15% weight
+      behaviorScore    // 10% weight
     };
   }
 

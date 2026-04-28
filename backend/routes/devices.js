@@ -1,3 +1,29 @@
+// ============================================================
+// DEVICES.JS - ROUTES UNTUK MANAJEMEN PERANGKAT (DEVICES)
+// ============================================================
+// File ini berisi endpoint untuk manajemen perangkat mobile (Android/iOS)
+// yang terhubung ke sistem pembayaran NFC
+//
+// ENDPOINT:
+// - POST /register -> Daftarkan perangkat baru (first-time setup)
+// - POST /sync-device -> Sinkronisasi data perangkat dengan server
+// - GET / -> Ambil semua perangkat (admin dashboard)
+// - GET /:deviceId -> Detail perangkat tertentu
+// - PUT /:deviceId/status -> Update status online/offline perangkat
+// - DELETE /:deviceId -> Hapus perangkat (admin only)
+// - GET /stats/summary -> Statistik perangkat (total, online, offline)
+//
+// KONSEP PENTING:
+// 1. DEVICE TRACKING: Setiap perangkat Android yang install app harus register
+// 2. SYNC MECHANISM: Perangkat sync data (users, transactions) ke server
+// 3. ONLINE STATUS: Server track perangkat mana yang online (lastSeen < 5 menit)
+// 4. REAL-TIME: Perubahan status dikirim via Socket.IO ke admin dashboard
+//
+// FLOW REGISTRASI PERANGKAT:
+// Mobile App (Android) -> POST /api/devices/register -> Server
+// Server save device info -> Return success -> App siap digunakan
+// ============================================================
+
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
 const { authenticateDevice } = require('../middleware/auth');
@@ -5,31 +31,58 @@ const { authenticateDevice } = require('../middleware/auth');
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// Register new device (for mobile app initialization)
+// ============================================================
+// ENDPOINT 1: POST /register - DAFTARKAN PERANGKAT BARU
+// ============================================================
+// Endpoint ini dipanggil saat user pertama kali install & buka app
+//
+// REQUEST BODY:
+// {
+//   "deviceId": "ABC123XYZ789",      // Unique ID perangkat (dari Android)
+//   "deviceName": "Samsung Galaxy",   // Nama perangkat (optional)
+//   "platform": "android",            // Platform (android/ios)
+//   "appVersion": "1.0.0"             // Versi aplikasi (optional)
+// }
+//
+// CARA KERJA:
+// 1. Validasi deviceId (wajib ada)
+// 2. UPSERT: Update jika sudah ada, Create jika belum ada
+//    - Ini mencegah error jika user re-install app
+// 3. Set isOnline = true (perangkat baru dianggap online)
+// 4. Update lastSeen dengan waktu sekarang
+// 5. Return data perangkat
+//
+// RESPONSE:
+// {
+//   "success": true,
+//   "message": "Perangkat berhasil didaftarkan",
+//   "device": { ... }
+// }
+// ============================================================
 router.post('/register', async (req, res) => {
   try {
     const { deviceId, deviceName, platform, appVersion } = req.body;
     
     if (!deviceId) {
-      return res.status(400).json({ error: 'Device ID is required' });
+      return res.status(400).json({ error: 'ID Perangkat diperlukan' });
     }
 
     const now = new Date();
     
-    // Register or update device record
+    // Daftarkan atau perbarui catatan perangkat
     const deviceRecord = await prisma.device.upsert({
       where: { deviceId: deviceId },
       update: {
-        deviceName: deviceName || `${platform} Device ${deviceId.slice(-6)}`,
+        deviceName: deviceName || `Perangkat ${platform} ${deviceId.slice(-6)}`,
         platform: platform || 'unknown',
         ipAddress: req.ip,
         isOnline: true,
         lastSeen: now,
-        // Keep existing user/balance data on update
+        // Simpan data pengguna/saldo yang ada saat update
       },
       create: {
         deviceId: deviceId,
-        deviceName: deviceName || `${platform} Device ${deviceId.slice(-6)}`,
+        deviceName: deviceName || `Perangkat ${platform} ${deviceId.slice(-6)}`,
         platform: platform || 'unknown',
         ipAddress: req.ip,
         isOnline: true,
@@ -43,31 +96,31 @@ router.post('/register', async (req, res) => {
     
     res.json({
       success: true,
-      message: 'Device registered successfully',
+      message: 'Perangkat berhasil didaftarkan',
       device: deviceRecord
     });
 
   } catch (error) {
-    console.error('❌ Device registration error:', error);
+    console.error('❌ Kesalahan pendaftaran perangkat:', error);
     res.status(500).json({ 
-      error: 'Failed to register device',
+      error: 'Gagal mendaftarkan perangkat',
       details: error.message 
     });
   }
 });
 
-// Sync device data (compatible with existing mobile app)
+// Sinkronkan data perangkat (kompatibel dengan aplikasi mobile yang ada)
 router.post('/sync-device', authenticateDevice, async (req, res) => {
   try {
     const { device, users, recentTransactions, stats } = req.body;
     
     if (!device || !device.deviceId) {
-      return res.status(400).json({ error: 'Device ID is required' });
+      return res.status(400).json({ error: 'ID Perangkat diperlukan' });
     }
 
     const now = new Date();
     
-    // Update or create device record
+    // Perbarui atau buat catatan perangkat
     const deviceRecord = await prisma.device.upsert({
       where: { deviceId: device.deviceId },
       update: {
@@ -91,7 +144,7 @@ router.post('/sync-device', authenticateDevice, async (req, res) => {
       }
     });
 
-    // Sync users if provided
+    // Sinkronkan pengguna jika disediakan
     if (users && Array.isArray(users)) {
       for (const userData of users) {
         await prisma.user.upsert({
@@ -113,7 +166,7 @@ router.post('/sync-device', authenticateDevice, async (req, res) => {
       }
     }
 
-    // Sync transactions if provided
+    // Sinkronkan transaksi jika disediakan
     if (recentTransactions && Array.isArray(recentTransactions)) {
       for (const txData of recentTransactions) {
         await prisma.transaction.upsert({
@@ -138,7 +191,7 @@ router.post('/sync-device', authenticateDevice, async (req, res) => {
 
     console.log(`📱 Device sync: ${device.deviceId.slice(-8)} | Users: ${stats?.totalUsers || 0} | Balance: Rp ${(stats?.totalBalance || 0).toLocaleString('id-ID')} | IP: ${req.ip}`);
 
-    // Check for pending balance updates
+    // Periksa pembaruan saldo yang tertunda
     const pendingUpdates = await prisma.adminLog.findMany({
       where: {
         action: 'BALANCE_UPDATE_PENDING',
@@ -150,7 +203,7 @@ router.post('/sync-device', authenticateDevice, async (req, res) => {
       take: 10
     });
 
-    // Emit to admin dashboard
+    // Kirim ke dashboard admin
     if (req.io) {
       req.io.to('admin-room').emit('device-sync', {
         device: deviceRecord,
@@ -160,19 +213,19 @@ router.post('/sync-device', authenticateDevice, async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Device synced successfully',
+      message: 'Perangkat berhasil disinkronkan',
       balanceUpdates: pendingUpdates.map(update => JSON.parse(update.details)),
       deviceId: device.deviceId,
       timestamp: now.toISOString()
     });
 
   } catch (error) {
-    console.error('Device sync error:', error);
-    res.status(500).json({ error: 'Failed to sync device' });
+    console.error('❌ Kesalahan sinkronisasi perangkat:', error);
+    res.status(500).json({ error: 'Gagal menyinkronkan perangkat' });
   }
 });
 
-// Get all devices
+// Dapatkan semua perangkat
 router.get('/', async (req, res) => {
   try {
     const devices = await prisma.device.findMany({
@@ -181,21 +234,21 @@ router.get('/', async (req, res) => {
       }
     });
 
-    // Update online status based on last seen
+    // Perbarui status online berdasarkan terakhir terlihat
     const now = new Date();
     const devicesWithStatus = devices.map(device => ({
       ...device,
-      isOnline: (now - new Date(device.lastSeen)) < 300000 // 5 minutes
+      isOnline: (now - new Date(device.lastSeen)) < 300000 // 5 menit
     }));
 
     res.json(devicesWithStatus);
   } catch (error) {
-    console.error('Get devices error:', error);
-    res.status(500).json({ error: 'Failed to get devices' });
+    console.error('❌ Kesalahan mendapatkan perangkat:', error);
+    res.status(500).json({ error: 'Gagal mendapatkan perangkat' });
   }
 });
 
-// Get device by ID
+// Dapatkan perangkat berdasarkan ID
 router.get('/:deviceId', async (req, res) => {
   try {
     const { deviceId } = req.params;
@@ -205,10 +258,10 @@ router.get('/:deviceId', async (req, res) => {
     });
 
     if (!device) {
-      return res.status(404).json({ error: 'Device not found' });
+      return res.status(404).json({ error: 'Perangkat tidak ditemukan' });
     }
 
-    // Get users for this device
+    // Dapatkan pengguna untuk perangkat ini
     const users = await prisma.user.findMany({
       where: { deviceId },
       select: {
@@ -221,7 +274,7 @@ router.get('/:deviceId', async (req, res) => {
       }
     });
 
-    // Get recent transactions for this device
+    // Dapatkan transaksi terbaru untuk perangkat ini
     const transactions = await prisma.transaction.findMany({
       where: { deviceId },
       include: {
@@ -247,12 +300,12 @@ router.get('/:deviceId', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Get device error:', error);
-    res.status(500).json({ error: 'Failed to get device' });
+    console.error('❌ Kesalahan mendapatkan perangkat:', error);
+    res.status(500).json({ error: 'Gagal mendapatkan perangkat' });
   }
 });
 
-// Update device status
+// Perbarui status perangkat
 router.put('/:deviceId/status', async (req, res) => {
   try {
     const { deviceId } = req.params;
@@ -266,38 +319,38 @@ router.put('/:deviceId/status', async (req, res) => {
       }
     });
 
-    // Emit to admin dashboard
+    // Kirim ke dashboard admin
     if (req.io) {
       req.io.to('admin-room').emit('device-status-updated', { device });
     }
 
     res.json({
-      message: 'Device status updated',
+      message: 'Status perangkat berhasil diperbarui',
       device
     });
 
   } catch (error) {
-    console.error('Update device status error:', error);
-    res.status(500).json({ error: 'Failed to update device status' });
+    console.error('❌ Kesalahan memperbarui status perangkat:', error);
+    res.status(500).json({ error: 'Gagal memperbarui status perangkat' });
   }
 });
 
-// Delete device (admin only)
+// Hapus perangkat (khusus admin)
 router.delete('/:deviceId', async (req, res) => {
   try {
     const { deviceId } = req.params;
     const { adminPassword } = req.body;
 
-    // Verify admin password
+    // Verifikasi password admin
     if (adminPassword !== process.env.ADMIN_PASSWORD) {
-      return res.status(401).json({ error: 'Invalid admin password' });
+      return res.status(401).json({ error: 'Password admin tidak valid' });
     }
 
     await prisma.device.delete({
       where: { deviceId }
     });
 
-    // Log admin action
+    // Catat aksi admin
     await prisma.adminLog.create({
       data: {
         action: 'DEVICE_DELETE',
@@ -307,22 +360,22 @@ router.delete('/:deviceId', async (req, res) => {
       }
     });
 
-    // Emit to admin dashboard
+    // Kirim ke dashboard admin
     if (req.io) {
       req.io.to('admin-room').emit('device-deleted', { deviceId });
     }
 
     res.json({
-      message: 'Device deleted successfully'
+      message: 'Perangkat berhasil dihapus'
     });
 
   } catch (error) {
-    console.error('Delete device error:', error);
-    res.status(500).json({ error: 'Failed to delete device' });
+    console.error('❌ Kesalahan menghapus perangkat:', error);
+    res.status(500).json({ error: 'Gagal menghapus perangkat' });
   }
 });
 
-// Get device statistics
+// Dapatkan statistik perangkat
 router.get('/stats/summary', async (req, res) => {
   try {
     const [totalDevices, onlineDevices, totalUsers, totalBalance] = await Promise.all([
@@ -330,7 +383,7 @@ router.get('/stats/summary', async (req, res) => {
       prisma.device.count({
         where: {
           lastSeen: {
-            gte: new Date(Date.now() - 300000) // Last 5 minutes
+            gte: new Date(Date.now() - 300000) // 5 menit terakhir
           }
         }
       }),
@@ -352,8 +405,8 @@ router.get('/stats/summary', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Get device stats error:', error);
-    res.status(500).json({ error: 'Failed to get device statistics' });
+    console.error('❌ Kesalahan mendapatkan statistik perangkat:', error);
+    res.status(500).json({ error: 'Gagal mendapatkan statistik perangkat' });
   }
 });
 

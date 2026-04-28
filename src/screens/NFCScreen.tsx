@@ -154,30 +154,26 @@ interface NFCScreenProps {
  * ==================================================================================
  */
 export default function NFCScreen({ user, onBack }: NFCScreenProps) {
-  // STATE 1: nfcEnabled
-  // Track apakah NFC hardware enabled atau disabled
-  // Initial: false (assume disabled until check)
-  // Use case: Show instruction screen jika disabled
-  const [nfcEnabled, setNfcEnabled] = useState(false);
+  // STATE 1: nfcEnabled - Flag untuk cek apakah hardware NFC aktif atau tidak
+  // false = tampilkan layar instruksi "Aktifkan NFC"
+  // true = tampilkan form pembayaran
+  const [nfcEnabled, setNfcEnabled] = useState(false); // Asumsi awal: disabled
   
-  // STATE 2: amount
-  // Input jumlah pembayaran dari merchant
-  // Initial: empty string
-  // Controlled input pattern: value={amount} onChangeText={setAmount}
-  const [amount, setAmount] = useState('');
+  // STATE 2: amount - Input jumlah uang yang akan diterima oleh merchant
+  // Controlled component: value={amount} onChangeText={setAmount}
+  // Nilai berupa string karena TextInput bekerja dengan string
+  const [amount, setAmount] = useState(''); // Awalnya kosong
   
-  // STATE 3: currentBalance
-  // Display merchant balance terkini
-  // Initial: user?.balance dari props (could be stale)
-  // Updated: After fetchBalance() call (after successful payment)
-  const [currentBalance, setCurrentBalance] = useState(user?.balance || 0);
+  // STATE 3: currentBalance - Saldo merchant yang ditampilkan di layar
+  // Nilai awal dari props user, tapi akan di-update setelah transaksi berhasil
+  // Digunakan untuk menampilkan "Saldo Anda: Rp xxx"
+  const [currentBalance, setCurrentBalance] = useState(user?.balance || 0); // Fallback ke 0 jika undefined
   
-  // HOOK: usePayment
-  // Custom hook untuk payment processing logic
-  // Returns:
-  // - isProcessing: boolean flag untuk loading state
-  // - processTapToPayTransfer: Function untuk proses merchant payment
-  const { isProcessing, processTapToPayTransfer } = usePayment();
+  // HOOK: usePayment - Custom hook yang menyediakan logika pembayaran NFC
+  // Returns dua hal penting:
+  // - isProcessing: boolean untuk disable tombol saat proses payment berlangsung
+  // - processTapToPayTransfer: function utama untuk memproses pembayaran
+  const { isProcessing, processTapToPayTransfer } = usePayment(); // Destructuring object
 
   /* ================================================================================
    * EFFECT: NFC Initialization & Cleanup
@@ -195,16 +191,15 @@ export default function NFCScreen({ user, onBack }: NFCScreenProps) {
    * ================================================================================
    */
   useEffect(() => {
-    // Check NFC on mount
-    checkNFC();
+    // Panggil checkNFC saat komponen pertama kali di-render
+    checkNFC(); // Cek apakah NFC supported dan enabled
     
-    // Cleanup NFC on unmount
-    // Return function dari useEffect adalah cleanup function
-    // Dipanggil saat component unmount atau before next effect
+    // Cleanup function yang dijalankan saat komponen di-unmount (dihapus dari layar)
+    // Penting untuk melepas resource NFC agar tidak memory leak
     return () => {
-      NFCService.cleanup();
+      NFCService.cleanup(); // Bersihkan resource NFC hardware
     };
-  }, []);
+  }, []); // Array kosong = hanya jalan sekali saat mount
 
   /* ================================================================================
    * FUNCTION: checkNFC
@@ -224,17 +219,17 @@ export default function NFCScreen({ user, onBack }: NFCScreenProps) {
    * ================================================================================
    */
   const checkNFC = async () => {
-    // STEP 1: Init NFC hardware
-    // NFCService.initNFC() akan check apakah device support NFC
-    const supported = await NFCService.initNFC();
+    // STEP 1: Inisialisasi hardware NFC dan cek apakah device support NFC
+    // Returns true jika support, false jika tidak
+    const supported = await NFCService.initNFC(); // Async karena akses hardware
     
     if (supported) {
-      // STEP 2: Check apakah NFC enabled
-      // User might have NFC hardware tapi disabled di settings
-      const enabled = await NFCService.checkNFCEnabled();
-      setNfcEnabled(enabled);
+      // STEP 2: Jika device support, cek apakah user sudah mengaktifkan NFC di pengaturan
+      // Bisa saja device support tapi NFC dimatikan oleh user
+      const enabled = await NFCService.checkNFCEnabled(); // Cek status enabled/disabled
+      setNfcEnabled(enabled); // Update state UI
     }
-    // Jika not supported, nfcEnabled tetap false (default value)
+    // Jika tidak support, nfcEnabled tetap false (nilai default)
   };
 
   /* ================================================================================
@@ -264,29 +259,28 @@ export default function NFCScreen({ user, onBack }: NFCScreenProps) {
    */
   const fetchBalance = async () => {
     try {
-      // API Call: Get latest user data
-      const response = await apiService.getUserById(user.id);
+      // Panggil API untuk mendapatkan data user terbaru (termasuk balance)
+      const response = await apiService.getUserById(user.id); // Request ke backend
       
-      // RESPONSE FORMAT 1: { user: { balance: number } }
+      // Backend bisa return 2 format berbeda, kita handle keduanya
+      // FORMAT 1: { user: { balance: 100000 } } - nested object
       if (response && response.user && typeof response.user.balance === 'number') {
-        setCurrentBalance(response.user.balance);
-        console.log('✅ Balance refreshed:', response.user.balance);
+        setCurrentBalance(response.user.balance); // Update state dengan balance baru
+        console.log('✅ Balance refreshed:', response.user.balance); // Log untuk debugging
       } 
-      // RESPONSE FORMAT 2: { balance: number } (direct user object)
+      // FORMAT 2: { balance: 100000 } - direct object
       else if (typeof response === 'object' && typeof response.balance === 'number') {
-        setCurrentBalance(response.balance);
+        setCurrentBalance(response.balance); // Update state
         console.log('✅ Balance refreshed (fallback):', response.balance);
       } 
-      // UNEXPECTED FORMAT
+      // FORMAT TIDAK DIKENALI: log warning tapi tidak throw error
       else {
         console.warn('⚠️ Balance refresh: unexpected response structure', response);
       }
     } catch (error: any) {
-      // Silent fail: Tidak show alert ke user
-      // Kenapa?
-      // - Balance refresh bukan critical operation
-      // - Balance akan refresh otomatis saat kembali ke DashboardScreen
-      // - Prevent annoying error alerts setelah successful payment
+      // Jika gagal refresh balance, tidak tampilkan alert ke user (silent fail)
+      // Alasan: balance akan ter-update otomatis saat kembali ke Dashboard
+      // Tidak perlu ganggu user dengan error yang tidak kritis
       console.error('❌ Failed to refresh balance:', error?.message || error);
     }
   };
@@ -326,28 +320,28 @@ export default function NFCScreen({ user, onBack }: NFCScreenProps) {
    * ================================================================================
    */
   const handleSendMoney = async () => {
-    // VALIDATION 1: Check user ID valid
-    // Guard clause untuk ensure logged-in user
+    // VALIDASI 1: Pastikan user sudah login dan punya ID yang valid
+    // Operator ?. = optional chaining, cek property hanya jika object tidak null
     if (!user?.id) {
-      Alert.alert('Error', 'User tidak valid. Silakan login ulang.');
-      return; // Early return: invalid user
+      Alert.alert('Error', 'User tidak valid. Silakan login ulang.'); // Alert native
+      return; // Stop proses jika user invalid
     }
 
-    // VALIDATION 2: Parse dan validate amount
-    // parseFloat() convert string "50000" → number 50000
-    // Handle decimal inputs: "50000.50" → 50000.50
-    const amountNum = parseFloat(amount);
+    // VALIDASI 2: Convert input string menjadi angka dan cek validitasnya
+    // parseFloat mengubah "50000" (string) menjadi 50000 (number)
+    // Bisa handle desimal: "50000.50" → 50000.50
+    const amountNum = parseFloat(amount); // Parse string ke float
     
-    // Check amount is valid number dan > 0
-    // !amountNum handles: NaN, 0, null, undefined
+    // Cek apakah hasil parsing valid dan lebih dari 0
+    // !amountNum akan true jika: NaN, 0, null, atau undefined
     if (!amountNum || amountNum <= 0) {
-      Alert.alert('Error', 'Masukkan jumlah yang valid');
-      return; // Early return: invalid amount
+      Alert.alert('Error', 'Masukkan jumlah yang valid'); // Pesan error
+      return; // Stop proses
     }
 
-    // VALIDATION 3: No minimum amount restriction
-    // Sekarang bisa transfer jumlah berapapun (Rp 1, Rp 100, Rp 19.456, dll)
-    // Fraud detection AI (20 transaksi historis) akan handle abnormal amounts
+    // CATATAN PENTING: Tidak ada batasan minimum jumlah transfer
+    // Sistem fraud detection AI akan mendeteksi jumlah yang tidak normal
+    // AI menganalisis 20 transaksi historis untuk mendeteksi pola anomali
 
     // PAYMENT PROCESSING
     // Call processTapToPayTransfer dari usePayment hook

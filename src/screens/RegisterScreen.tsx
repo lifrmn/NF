@@ -151,32 +151,26 @@ interface RegisterScreenProps {
  * ==================================================================================
  */
 export default function RegisterScreen({ onRegisterSuccess, onNavigateToLogin }: RegisterScreenProps) {
-  // STATE 1: name input
-  // Controlled component pattern
-  // Initial value: empty string
-  const [name, setName] = useState('');
+  // STATE 1: name - Input nama lengkap user (contoh: "Budi Santoso")
+  // Controlled component, nilai selalu sinkron dengan state
+  const [name, setName] = useState(''); // Awalnya kosong
   
-  // STATE 2: username input
-  // Unique identifier per user
-  // Initial value: empty string
-  const [username, setUsername] = useState('');
+  // STATE 2: username - Input username unik untuk login (contoh: "budi123")
+  // Harus unique di database, divalidasi di backend
+  const [username, setUsername] = useState(''); // Awalnya kosong
   
-  // STATE 3: password input
-  // Will be hashed with bcrypt di backend
-  // Initial value: empty string
-  const [password, setPassword] = useState('');
+  // STATE 3: password - Input password yang akan di-hash di backend
+  // Backend menggunakan bcrypt untuk hash (one-way encryption)
+  const [password, setPassword] = useState(''); // Awalnya kosong
   
-  // STATE 4: confirmPassword input
-  // Must match dengan password untuk validation
-  // Initial value: empty string
-  const [confirmPassword, setConfirmPassword] = useState('');
+  // STATE 4: confirmPassword - Input konfirmasi password untuk validasi
+  // Harus sama persis dengan password, mencegah typo user
+  const [confirmPassword, setConfirmPassword] = useState(''); // Awalnya kosong
   
-  // STATE 5: loading flag
-  // Use case:
-  // - Disable register button saat processing
-  // - Show loading spinner & text "Membuat Akun..."
-  // - Prevent multiple concurrent registration requests
-  const [loading, setLoading] = useState(false);
+  // STATE 5: loading - Flag untuk disable tombol dan tampilkan spinner
+  // true = tombol disabled, text berubah jadi "Membuat Akun..."
+  // false = tombol aktif, text "Daftar"
+  const [loading, setLoading] = useState(false); // Awalnya tidak loading
 
   /* ================================================================================
    * FUNCTION: handleRegister

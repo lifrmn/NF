@@ -8,66 +8,54 @@
 // - Security & rate limiting
 // - Admin dashboard endpoints
 
-// STEP 1: Load environment variables dari file .env
-// File .env berisi konfigurasi sensitif seperti database URL, JWT secret, dll
-require('dotenv').config();
+// Load environment variables dari file .env
+// File .env berisi konfigurasi sensitif: DATABASE_URL, JWT_SECRET, PORT, dll
+require('dotenv').config(); // Execute dotenv untuk inject variabel ke process.env
 
-// STEP 2: Import semua library/package yang dibutuhkan
-const express = require('express'); // Framework web server (routing, middleware, dll)
-const cors = require('cors'); // Cross-Origin Resource Sharing - izinkan akses dari domain berbeda (mobile app)
-const helmet = require('helmet'); // Security middleware untuk proteksi header HTTP
-const morgan = require('morgan'); // HTTP request logger - catat semua request yang masuk
-const rateLimit = require('express-rate-limit'); // Pembatas request untuk mencegah spam/DDoS
-const { PrismaClient } = require('@prisma/client'); // ORM untuk akses database PostgreSQL
-const http = require('http'); // Built-in Node.js HTTP server (diperlukan untuk Socket.IO)
-const socketIo = require('socket.io'); // Real-time bidirectional communication untuk live updates
-const path = require('path'); // Utility untuk manipulasi path file/folder
-const os = require('os'); // Info sistem operasi (untuk ambil IP address laptop)
+const express = require('express'); // Framework web server dengan routing & middleware
+const cors = require('cors'); // Middleware untuk izinkan cross-origin requests (mobile app)
+const helmet = require('helmet'); // Security middleware: set HTTP headers untuk proteksi
+const morgan = require('morgan'); // HTTP logger: catat semua request (method, URL, status, time)
+const rateLimit = require('express-rate-limit'); // Anti spam: batasi request per IP
+const { PrismaClient } = require('@prisma/client'); // ORM untuk database PostgreSQL
+const http = require('http'); // Node.js HTTP server (perlu untuk Socket.IO)
+const socketIo = require('socket.io'); // Real-time communication: push updates ke clients
+const path = require('path'); // Utility untuk manipulasi path file sistem
+const os = require('os'); // Info sistem operasi: hostname, IP, platform, dll
 
-// STEP 3: Import semua route modules
-// Setiap route module menangani endpoint tertentu (dipisah agar kode rapi)
-const authRoutes = require('./routes/auth'); // Endpoints autentikasi: login, register, logout
-const userRoutes = require('./routes/users'); // Endpoints user management: get, update, delete user
-const transactionRoutes = require('./routes/transactions'); // Endpoints transaksi: send money, history
-const fraudRoutes = require('./routes/fraud'); // Endpoints fraud detection: alert, block, review
-const adminRoutes = require('./routes/admin'); // Endpoints admin: dashboard stats, logs, bulk actions
-const deviceRoutes = require('./routes/devices'); // Endpoints device sync: register, sync data
-const nfcCardRoutes = require('./routes/nfcCards'); // Endpoints NFC card: register, link, topup card
+const authRoutes = require('./routes/auth'); // Auth: login, register, logout, verify
+const userRoutes = require('./routes/users'); // User: get, update, delete, balance
+const transactionRoutes = require('./routes/transactions'); // Transaction: send, receive, history
+const fraudRoutes = require('./routes/fraud'); // Fraud: detect, alert, review, block
+const adminRoutes = require('./routes/admin'); // Admin: dashboard, stats, logs, bulk ops
+const deviceRoutes = require('./routes/devices'); // Device: register, sync, health check
+const nfcCardRoutes = require('./routes/nfcCards'); // NFC Card: register, link, topup, status
 
-// STEP 4: Import custom middleware
-// Middleware adalah fungsi yang berjalan sebelum request sampai ke endpoint
-const { authenticateToken, authenticateAdmin } = require('./middleware/auth'); // Middleware untuk cek JWT token & admin password
-const { errorHandler } = require('./middleware/errorHandler'); // Middleware untuk handle error secara terpusat
-const { requestLogger } = require('./middleware/logger'); // Middleware untuk log semua HTTP request
+const { authenticateToken, authenticateAdmin } = require('./middleware/auth'); // Auth middleware: cek JWT & admin password
+const { errorHandler } = require('./middleware/errorHandler'); // Error handler: tangani semua error terpusat
+const { requestLogger } = require('./middleware/logger'); // Logger: catat detail request (time, IP, body, headers)
 
-// STEP 5: Initialize aplikasi
-// Buat instance dari Express, HTTP server, dan Prisma client
-const app = express(); // Instance Express app (untuk routing & middleware)
-const server = http.createServer(app); // HTTP server (wrapping Express app agar bisa pakai Socket.IO)
-const prisma = new PrismaClient(); // Instance Prisma client untuk akses database
+const app = express(); // Buat Express app instance untuk routing
+const server = http.createServer(app); // Buat HTTP server yang wrap Express (untuk Socket.IO)
+const prisma = new PrismaClient(); // Buat Prisma client untuk akses database
 
 /* ------------------------- 🔧 CONFIGURATIONS ------------------------- */
-// STEP 6: Setup konfigurasi server
-// Ambil dari environment variables (.env file) atau pakai default value
+const PORT = Number(process.env.PORT || 4000); // Port server dari .env, default 4000
+const HOST = process.env.HOST || '0.0.0.0'; // Host binding: 0.0.0.0 = listen all interfaces
+const WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000); // Rate limit window: 15 menit (ms)
+const MAX_REQS = Number(process.env.RATE_LIMIT_MAX_REQUESTS || 100); // Max request: 100 per window
 
-const PORT = Number(process.env.PORT || 4000); // Port server (default: 4000)
-const HOST = process.env.HOST || '0.0.0.0'; // Host binding (0.0.0.0 = listen semua interface)
-const WINDOW_MS = Number(process.env.RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000); // Rate limit window: 15 menit (dalam ms)
-const MAX_REQS = Number(process.env.RATE_LIMIT_MAX_REQUESTS || 100); // Max request per window (default: 100)
-
-// STEP 7: Setup Socket.IO untuk real-time updates
-// Socket.IO memungkinkan push notifikasi ke mobile app & dashboard
-const io = socketIo(server, {
+const io = socketIo(server, { // Buat Socket.IO instance dari HTTP server
   cors: {
-    origin: '*', // Izinkan koneksi dari semua origin (mobile app & admin dashboard)
-    methods: ['GET', 'POST'], // Method HTTP yang diizinkan
-    credentials: true, // Izinkan credentials (cookies, auth headers)
+    origin: '*', // Allow all origins (mobile app + admin dashboard)
+    methods: ['GET', 'POST'], // Allow method HTTP yang dibutuhkan
+    credentials: true, // Allow credentials (cookies, auth headers)
   },
 });
 
-// STEP 8: Trust proxy
-// Diperlukan agar Express bisa ambil real IP dari client (bukan IP proxy)
-app.set('trust proxy', 1);
+// Trust proxy: agar Express bisa ambil real IP client (bukan IP proxy/load balancer)
+// Penting untuk rate limiting & logging yang akurat
+app.set('trust proxy', 1); // 1 = trust first proxy hop
 
 /* ------------------------- 🧱 MIDDLEWARES ------------------------- */
 // STEP 9: Apply middlewares (dieksekusi untuk setiap request yang masuk)

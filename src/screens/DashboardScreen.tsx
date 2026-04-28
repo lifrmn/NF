@@ -144,48 +144,40 @@ export default function DashboardScreen({ user, onLogout, onNavigateToNFC, onNav
    * ================================================================================
    */
   
-  // STATE 1: currentUser
-  // Latest user data dari database (includes updated balance)
-  // Initial: user dari props (could be stale)
-  // Updated: After refreshData() call
-  const [currentUser, setCurrentUser] = useState(user || null);
+  // STATE 1: currentUser - Data user terkini yang ditampilkan di layar
+  // Nilai awal dari props user, tapi akan di-update saat refresh data
+  // Digunakan untuk menampilkan nama dan saldo di UI
+  const [currentUser, setCurrentUser] = useState(user || null); // Fallback ke null jika user undefined
   
-  // STATE 2: transactions
-  // Array of user transactions (recent 10)
-  // Initial: empty array
-  // Updated: After getUserTransactions() call
-  const [transactions, setTransactions] = useState<any[]>([]);
+  // STATE 2: transactions - Array riwayat transaksi user (maks 10 terbaru)
+  // Awalnya kosong, lalu diisi saat refreshData() dipanggil
+  // Setiap item berisi info: siapa pengirim, penerima, jumlah, waktu
+  const [transactions, setTransactions] = useState<any[]>([]); // Array kosong sebagai nilai awal
   
-  // STATE 3: loading
-  // Boolean flag untuk RefreshControl (pull-to-refresh animation)
-  // true: Show spinner while refreshing
-  // false: Hide spinner
-  const [loading, setLoading] = useState(false);
+  // STATE 3: loading - Flag untuk animasi pull-to-refresh
+  // true = tampilkan spinner saat user tarik layar ke bawah untuk refresh
+  // false = sembunyikan spinner setelah loading selesai
+  const [loading, setLoading] = useState(false); // Awalnya tidak loading
   
-  // STATE 4: backendStatus
-  // String message untuk backend connection status
-  // Values: "Connecting...", "Backend Online ✅", "Backend Offline ❌", etc.
-  const [backendStatus, setBackendStatus] = useState('Connecting...');
+  // STATE 4: backendStatus - Pesan status koneksi ke backend yang ditampilkan ke user
+  // Contoh nilai: "Connecting...", "Connected: xyz.ngrok.io", "Offline Mode"
+  const [backendStatus, setBackendStatus] = useState('Connecting...'); // Status awal: sedang cek koneksi
   
-  // STATE 5: connectionStatus
-  // Enum untuk connection state
-  // 'connecting': Initial state, checking backend
-  // 'connected': Backend reachable
-  // 'offline': Backend tidak reachable
-  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'offline'>('connecting');
+  // STATE 5: connectionStatus - Status teknis koneksi dalam format enum
+  // Digunakan untuk logika internal (bukan ditampilkan langsung ke user)
+  // 'connecting' = sedang cek | 'connected' = sukses | 'offline' = gagal
+  const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'offline'>('connecting'); // Awal: connecting
   
-  // STATE 6: lastSyncTime
-  // Timestamp last successful balance sync
-  // null: Never synced
-  // Date: Last sync time (displayed as relative time)
-  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
+  // STATE 6: lastSyncTime - Waktu terakhir sinkronisasi saldo berhasil
+  // null berarti belum pernah sync, Date berarti ada waktu sync terakhir
+  // Digunakan untuk menampilkan "Terakhir diperbarui: 5 menit lalu"
+  const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null); // Awalnya null (belum pernah sync)
   
-  // STATE 7: syncStatus
-  // Result of last sync attempt
-  // 'never': No sync attempted yet
-  // 'success': Last sync succeeded
-  // 'failed': Last sync failed
-  const [syncStatus, setSyncStatus] = useState<'success' | 'failed' | 'never'>('never');
+  // STATE 7: syncStatus - Hasil dari upaya sinkronisasi terakhir
+  // 'never' = belum pernah coba sync
+  // 'success' = sync terakhir berhasil (tampilkan tanda centang hijau)
+  // 'failed' = sync terakhir gagal (tampilkan tanda warning)
+  const [syncStatus, setSyncStatus] = useState<'success' | 'failed' | 'never'>('never'); // Awalnya never
 
   /* ================================================================================
    * FUNCTION: refreshData
@@ -210,94 +202,105 @@ export default function DashboardScreen({ user, onLogout, onNavigateToNFC, onNav
    * ================================================================================
    */
   const refreshData = async () => {
+    // Cek dulu apakah ada data user yang valid
     if (!user || !user.id) {
-      console.log('⚠️ No valid user for refresh data');
-      return;
+      console.log('⚠️ No valid user for refresh data'); // Log jika user tidak valid
+      return; // Hentikan proses jika user tidak ada
     }
     
-    setLoading(true);
+    setLoading(true); // Aktifkan spinner loading di UI
     try {
-      // Ambil data user dari database lokal terlebih dahulu (cepat)
-      const updatedUser = await getUserById(user.id);
+      // STEP 1: Ambil data user dari database lokal terlebih dahulu (strategi cache-first)
+      // Keuntungan: Respons cepat, tidak tergantung koneksi internet
+      const updatedUser = await getUserById(user.id); // Query database lokal
       if (updatedUser) {
-        setCurrentUser(updatedUser);
-        console.log('💾 Loaded user from local DB');
+        setCurrentUser(updatedUser); // Update state dengan data lokal
+        console.log('💾 Loaded user from local DB'); // Log sukses
       }
 
-      // Ambil riwayat transaksi dari lokal
-      const userTransactions = await getUserTransactions(user.id);
-      setTransactions(userTransactions || []);
+      // STEP 2: Ambil riwayat transaksi dari database lokal
+      const userTransactions = await getUserTransactions(user.id); // Query transaksi
+      setTransactions(userTransactions || []); // Update state, fallback ke array kosong jika null
 
-      // Sync balance dari backend (optional, hanya jika koneksi bagus)
+      // STEP 3: Sinkronisasi saldo dari backend secara background (opsional)
+      // Jika backend offline, aplikasi tetap bisa jalan dengan data lokal
       try {
-        console.log('💰 Syncing balance from backend...');
-        const syncedBalance = await syncBalanceFromBackend(user.id);
+        console.log('💰 Syncing balance from backend...'); // Log mulai sync
+        const syncedBalance = await syncBalanceFromBackend(user.id); // Request ke backend
+        
+        // Validasi: pastikan balance yang diterima adalah angka yang valid
         if (syncedBalance !== null && typeof syncedBalance === 'number' && updatedUser) {
-          updatedUser.balance = syncedBalance;
-          setCurrentUser(updatedUser);
-          setLastSyncTime(new Date());
-          setSyncStatus('success');
-          console.log(`✅ Updated user balance from backend: ${syncedBalance}`);
+          updatedUser.balance = syncedBalance; // Update balance dari backend
+          setCurrentUser(updatedUser); // Update state dengan balance terbaru
+          setLastSyncTime(new Date()); // Catat waktu sync berhasil
+          setSyncStatus('success'); // Tandai status sync berhasil
+          console.log(`✅ Updated user balance from backend: ${syncedBalance}`); // Log sukses
         }
       } catch (syncError: any) {
-        setSyncStatus('failed');
-        // Silent fail untuk rate limit errors
+        setSyncStatus('failed'); // Tandai sync gagal
+        // Handling khusus untuk error rate limit dari Ngrok
         if (syncError.message?.includes('429')) {
-          console.log('⏱️ Rate limited, using cached balance');
+          console.log('⏱️ Rate limited, using cached balance'); // Log rate limit
         } else {
-          console.warn('⚠️ Balance sync failed, using local data:', syncError.message);
+          console.warn('⚠️ Balance sync failed, using local data:', syncError.message); // Log error lainnya
         }
       }
       
     } catch (error) {
-      console.error('Error refreshing data:', error);
+      console.error('Error refreshing data:', error); // Log error umum
+      // Hanya tampilkan alert jika data user sama sekali tidak ada
       if (!currentUser || !currentUser.id) {
-        Alert.alert('Error', 'Gagal memuat data terbaru');
+        Alert.alert('Error', 'Gagal memuat data terbaru'); // Alert ke user
       }
     } finally {
-      setLoading(false);
+      setLoading(false); // Matikan spinner loading, apapun hasilnya
     }
   };
 
-  // checkBackendStatus: Cek koneksi ke backend server (health check)
+  // checkBackendStatus: Fungsi untuk cek apakah server backend aktif
+  // Menggunakan health check endpoint untuk validasi koneksi
   const checkBackendStatus = async () => {
     try {
-      setConnectionStatus('connecting');
-      const healthCheck = await apiService.healthCheck();
-      const status = apiService.getConnectionStatus();
+      setConnectionStatus('connecting'); // Set status: sedang mengecek
+      const healthCheck = await apiService.healthCheck(); // Kirim request health check
+      const status = apiService.getConnectionStatus(); // Ambil info koneksi (URL, dll)
       
-      console.log('🔍 Health check response:', healthCheck);
+      console.log('🔍 Health check response:', healthCheck); // Log respons dari server
       
+      // Validasi: cek apakah respons menunjukkan server aktif
       if (healthCheck && (healthCheck.status === 'ok' || healthCheck.status === 'OK')) {
-        console.log('✅ Backend connected:', status.url);
-        setBackendStatus(`Connected: ${status.url || 'Backend Server'}`);
-        setConnectionStatus('connected');
+        console.log('✅ Backend connected:', status.url); // Log sukses
+        setBackendStatus(`Connected: ${status.url || 'Backend Server'}`); // Update status UI
+        setConnectionStatus('connected'); // Set status: terhubung
       } else {
-        console.log('⚠️ Backend response invalid:', healthCheck);
-        setBackendStatus('Offline Mode');
-        setConnectionStatus('offline');
+        console.log('⚠️ Backend response invalid:', healthCheck); // Log respons tidak valid
+        setBackendStatus('Offline Mode'); // Set status UI: offline
+        setConnectionStatus('offline'); // Set status: offline
       }
     } catch (error: any) {
-      // Handle rate limiting gracefully
+      // Handling khusus untuk rate limiting dari Ngrok
       if (error.message?.includes('429')) {
-        console.log('⏱️ Rate limited, backend status unknown');
-        setBackendStatus('Rate Limited - Using Cache');
-        setConnectionStatus('offline');
+        console.log('⏱️ Rate limited, backend status unknown'); // Log rate limit
+        setBackendStatus('Rate Limited - Using Cache'); // Info ke user
+        setConnectionStatus('offline'); // Anggap offline sementara
       } else {
-        console.log('❌ Backend connection check failed:', error);
-        setBackendStatus('Offline Mode');
-        setConnectionStatus('offline');
+        console.log('❌ Backend connection check failed:', error); // Log error umum
+        setBackendStatus('Offline Mode'); // Set status: offline
+        setConnectionStatus('offline'); // Set status: offline
       }
     }
   };
 
-  // useEffect: Load data awal dan auto-check backend setiap 90 detik (dikurangi untuk prevent rate limit)
+  // useEffect: Hook yang berjalan sekali saat komponen pertama kali di-mount
+  // Fungsi: 1) Load data awal, 2) Cek backend, 3) Setup interval untuk auto-check berkala
   useEffect(() => {
-    refreshData();
-    // Delay health check untuk prevent simultaneous requests
-    const initialHealthCheck = setTimeout(() => checkBackendStatus(), 3000);
-    // Auto-check setiap 90 detik (reduced from 30s untuk prevent Ngrok rate limit)
-    const statusInterval = setInterval(checkBackendStatus, 90000);
+    refreshData(); // Panggil refreshData untuk load data user & transaksi
+    
+    // Delay health check 3 detik agar tidak bertabrakan dengan request lain saat startup
+    const initialHealthCheck = setTimeout(() => checkBackendStatus(), 3000); // Delay 3 detik
+    
+    // Setup interval: cek backend setiap 90 detik (dikurangi dari 30s untuk hindari rate limit)
+    const statusInterval = setInterval(checkBackendStatus, 90000); // 90000 ms = 90 detik
     return () => {
       clearTimeout(initialHealthCheck);
       clearInterval(statusInterval);
